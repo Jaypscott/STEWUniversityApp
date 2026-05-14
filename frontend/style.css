@@ -1,0 +1,625 @@
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    font-family: Arial, sans-serif;
+    background: #f5f7fb;
+    color: #1f2937;
+}
+
+.app {
+    width: min(1200px, 94%);
+    margin: 0 auto;
+    padding: 32px 0;
+}
+
+.hero {
+    position: relative;
+    overflow: hidden;
+    background: linear-gradient(135deg, #111827, #374151);
+    color: white;
+    border-radius: 20px;
+    padding: 44px 36px;
+    margin-bottom: 24px;
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.15);
+    text-align: center;
+    font-family: Copperplate, "Copperplate Gothic Light", "Copperplate Gothic Bold", fantasy;
+}
+
+.hero::before {
+    content: "";
+    position: absolute;
+    width: 280px;
+    height: 280px;
+    background: rgba(250, 204, 21, 0.18);
+    border-radius: 50%;
+    top: -120px;
+    left: -90px;
+    animation: floatGlow 6s ease-in-out infinite;
+}
+
+.hero::after {
+    content: "";
+    position: absolute;
+    width: 220px;
+    height: 220px;
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 50%;
+    bottom: -100px;
+    right: -70px;
+    animation: floatGlow 7s ease-in-out infinite reverse;
+}
+
+.hero > * {
+    position: relative;
+    z-index: 1;
+}
+
+.music-icons {
+    display: flex;
+    justify-content: center;
+    gap: 18px;
+    margin-bottom: 18px;
+}
+
+.music-icons span {
+    font-size: 34px;
+    display: inline-block;
+    animation: floatIcon 2.8s ease-in-out infinite;
+}
+
+.music-icons span:nth-child(2) {
+    animation-delay: 0.2s;
+}
+
+.music-icons span:nth-child(3) {
+    animation-delay: 0.4s;
+}
+
+.music-icons span:nth-child(4) {
+    animation-delay: 0.6s;
+}
+
+.music-icons span:nth-child(5) {
+    animation-delay: 0.8s;
+}
+
+@keyframes floatIcon {
+    0%, 100% {
+        transform: translateY(0);
+    }
+
+    50% {
+        transform: translateY(-8px);
+    }
+}
+
+@keyframes floatGlow {
+    0%, 100% {
+        transform: translateY(0) scale(1);
+    }
+
+    50% {
+        transform: translateY(12px) scale(1.08);
+    }
+}
+
+.hero-logo {
+    position: absolute;
+    top: 20px;
+    right: 24px;
+    width: 110px;
+    height: auto;
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.08);
+    padding: 6px;
+    backdrop-filter: blur(4px);
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.25);
+    animation: logoFloat 4s ease-in-out infinite;
+    z-index: 2;
+}
+
+@keyframes logoFloat {
+    0%, 100% {
+        transform: translateY(0px);
+    }
+
+    50% {
+        transform: translateY(-6px);
+    }
+}
+
+.eyebrow {
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    font-size: 13px;
+    color: #facc15;
+    margin: 0 0 8px;
+}
+
+h1 {
+    margin: 0;
+    font-size: clamp(32px, 5vw, 56px);
+}
+
+.subtitle {
+    max-width: 720px;
+    margin: 14px auto 0;
+    text-align: center;
+    font-size: 18px;
+    line-height: 1.6;
+    color: #e5e7eb;
+}
+
+.panel {
+    background: rgba(255, 255, 255, 0.96);
+
+    border-radius: 18px;
+    padding: 24px;
+    margin-bottom: 22px;
+
+    border: 1px solid rgba(255, 255, 255, 0.35);
+
+    backdrop-filter: blur(6px);
+
+    box-shadow:
+        0 10px 30px rgba(15, 23, 42, 0.10),
+        0 4px 12px rgba(15, 23, 42, 0.08),
+        0 0 18px rgba(255, 215, 0, 0.05);
+
+    transition:
+        transform 0.25s ease,
+        box-shadow 0.25s ease;
+}
+
+.panel:hover {
+    transform: translateY(-3px);
+
+    box-shadow:
+        0 18px 38px rgba(15, 23, 42, 0.14),
+        0 8px 18px rgba(15, 23, 42, 0.10),
+        0 0 24px rgba(255, 215, 0, 0.08);
+}
+
+.section-header {
+    margin-bottom: 18px;
+}
+
+.section-header h2 {
+    font-family: "Brush Script MT", cursive;
+    font-size: 46px;
+    font-weight: normal;
+    letter-spacing: 1px;
+}
+
+.section-header p {
+    margin: 6px 0 0;
+    color: #6b7280;
+}
+
+.control-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(180px, 1fr));
+    gap: 16px;
+}
+
+label {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    font-weight: 700;
+    color: #374151;
+}
+
+input,
+select {
+    padding: 12px 14px;
+    border: 1px solid #d1d5db;
+    border-radius: 12px;
+    font-size: 16px;
+    background: white;
+}
+
+input:focus,
+select:focus {
+    outline: 3px solid #fde68a;
+    border-color: #facc15;
+}
+
+.button-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-top: 22px;
+}
+
+button {
+    border: none;
+    border-radius: 12px;
+    padding: 12px 18px;
+    font-size: 16px;
+    cursor: pointer;
+}
+
+.primary-button {
+    background: #111827;
+    color: white;
+}
+
+.secondary-button {
+    background: #f3f4f6;
+    color: #111827;
+    border: 1px solid #d1d5db;
+}
+
+button:hover {
+    transform: translateY(-1px);
+}
+
+.result-text,
+.explanation-text {
+    background: #f9fafb;
+    border: 1px solid #e5e7eb;
+    border-radius: 14px;
+    padding: 16px;
+    line-height: 1.6;
+    min-height: 56px;
+}
+
+.progression-chords {
+    margin-top: 15px;
+}
+
+.progression-button {
+    padding: 10px 14px;
+    margin: 5px;
+    border: 1px solid #999;
+    background: white;
+    cursor: pointer;
+    border-radius: 10px;
+    font-size: 16px;
+}
+
+.progression-button:hover {
+    background: #f3f4f6;
+}
+
+.progression-button.active {
+    background: #ffd966;
+    font-weight: bold;
+}
+
+/* Piano */
+.keyboard {
+    display: flex;
+    margin-top: 12px;
+    overflow-x: auto;
+    max-width: 100%;
+    padding-bottom: 20px;
+}
+
+.key {
+    border: 1px solid #333;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    padding-bottom: 8px;
+    font-size: 14px;
+    box-sizing: border-box;
+}
+
+.white {
+    width: 60px;
+    height: 220px;
+    background: white;
+    color: black;
+    z-index: 1;
+}
+
+.black {
+    width: 40px;
+    height: 140px;
+    background: black;
+    color: white;
+    margin-left: -20px;
+    margin-right: -20px;
+    z-index: 2;
+}
+
+.highlight {
+    background: #ffd966 !important;
+    color: black !important;
+}
+
+/* Fretboard */
+.fretboard {
+    margin-top: 12px;
+    overflow-x: auto;
+    max-width: 100%;
+    background: white;
+    padding: 15px;
+    border-radius: 14px;
+    border: 1px solid #ccc;
+}
+
+.string-row {
+    display: flex;
+    align-items: center;
+}
+
+.string-name {
+    width: 35px;
+    color: black;
+    font-weight: bold;
+}
+
+.fret {
+    width: 65px;
+    height: 45px;
+    border-left: 2px solid #999;
+    border-bottom: 2px solid #999;
+    background: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: black;
+    font-size: 13px;
+    box-sizing: border-box;
+}
+
+.fret.highlight {
+    background: #ffd966;
+    color: black;
+    font-weight: bold;
+}
+
+@media (max-width: 800px) {
+    .control-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .hero {
+        padding: 26px;
+    }
+
+    .panel {
+        padding: 18px;
+    }
+
+    .hero-logo {
+    width: 80px;
+    top: 14px;
+    right: 14px;
+    }
+}
+
+.chat-messages {
+    background: #f9fafb;
+    border: 1px solid #e5e7eb;
+    border-radius: 14px;
+    padding: 16px;
+    min-height: 220px;
+    max-height: 420px;
+    overflow-y: auto;
+}
+
+.chat-message {
+    max-width: 80%;
+    margin-bottom: 12px;
+    padding: 12px 14px;
+    border-radius: 14px;
+    line-height: 1.5;
+
+    animation: messagePopIn 0.28s ease;
+}
+
+@keyframes messagePopIn {
+    0% {
+        opacity: 0;
+        transform: translateY(10px) scale(0.96);
+    }
+
+    100% {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+/* Typing dots */
+
+.typing-indicator {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    height: 20px;
+}
+
+.typing-dot {
+    width: 8px;
+    height: 8px;
+    background: #6b7280;
+    border-radius: 50%;
+    animation: typingBounce 1.2s infinite ease-in-out;
+}
+
+.typing-dot:nth-child(2) {
+    animation-delay: 0.15s;
+}
+
+.typing-dot:nth-child(3) {
+    animation-delay: 0.3s;
+}
+
+@keyframes typingBounce {
+    0%, 80%, 100% {
+        transform: scale(0.7);
+        opacity: 0.5;
+    }
+
+    40% {
+        transform: scale(1.2);
+        opacity: 1;
+    }
+}
+
+
+.user-message {
+    margin-left: auto;
+    background: #111827;
+    color: white;
+}
+
+.ai-message {
+    margin-right: auto;
+    background: white;
+    border: 1px solid #e5e7eb;
+    color: #111827;
+}
+
+.chat-input-row {
+    display: flex;
+    gap: 12px;
+    margin-top: 14px;
+}
+
+.chat-input-row input {
+    flex: 1;
+}
+
+.inline-result-section {
+    margin-top: 24px;
+}
+
+.inline-explanation-section {
+    margin-top: 14px;
+}
+
+.key,
+.fret {
+    cursor: pointer;
+}
+
+.key:active,
+.fret:active {
+    transform: scale(0.97);
+}
+
+body {
+    position: relative;
+    overflow-x: hidden;
+}
+
+/* Sheet music watermark */
+body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: -2;
+
+    background:
+        repeating-linear-gradient(
+        to bottom,
+        rgba(17, 24, 39, 0.085) 0px,
+        rgba(17, 24, 39, 0.085) 1.5px,
+        transparent 1.5px,
+        transparent 12px
+        );
+
+opacity: 0.75;
+}
+
+/* Soft music note texture */
+body::after {
+    content: "𝄞   ♫      ♪        ♬      ♭     ♯     ♫      𝄢";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: -1;
+
+    font-size: 72px;
+    letter-spacing: 44px;
+    line-height: 2.1;
+    color: rgba(17, 24, 39, 0.035);
+    transform: rotate(-8deg);
+    white-space: pre-wrap;
+}
+
+/* Floating music notes */
+.background-music {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    overflow: hidden;
+    z-index: -1;
+}
+
+.background-music span {
+    position: absolute;
+    color: rgba(17, 24, 39, 0.83);
+    font-size: 52px;
+    animation: driftNote 20s linear infinite;
+}
+
+/* Left side */
+.background-music span:nth-child(1) {
+    left: 2%;
+    top: 88%;
+    animation-delay: 0s;
+}
+
+.background-music span:nth-child(2) {
+    left: 6%;
+    top: 102%;
+    animation-delay: 5s;
+    font-size: 64px;
+}
+
+.background-music span:nth-child(3) {
+    left: 10%;
+    top: 94%;
+    animation-delay: 9s;
+}
+
+/* Right side */
+.background-music span:nth-child(4) {
+    right: 8%;
+    top: 100%;
+    animation-delay: 2s;
+    font-size: 62px;
+}
+
+.background-music span:nth-child(5) {
+    right: 4%;
+    top: 90%;
+    animation-delay: 7s;
+}
+
+.background-music span:nth-child(6) {
+    right: 1%;
+    top: 104%;
+    animation-delay: 11s;
+    font-size: 60px;
+}
+
+@keyframes driftNote {
+    0% {
+        transform: translateY(0) rotate(0deg);
+        opacity: 0;
+    }
+
+    15% {
+        opacity: 0.14;
+    }
+
+    85% {
+        opacity: 0.14;
+    }
+
+    100% {
+        transform: translateY(-120vh) rotate(24deg);
+        opacity: 0;
+    }
+}

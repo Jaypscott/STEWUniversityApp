@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Music Theory AI</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="background-music">
+        <span>♪</span>
+        <span>♫</span>
+        <span>♬</span>
+        <span>♩</span>
+        <span>♭</span>
+        <span>♯</span>
+    </div>
+    <main class="app">
+        <header class="hero">
+            <img
+                src="assets/stew-logo.png"
+                alt="STEW University Logo"
+                class="hero-logo"
+            />
+           <div class="music-icons">
+                <span>♪</span>
+                <span>♫</span>
+                <span>♬</span>
+                <span>♩</span>
+                <span>♭</span>
+                <span>♯</span>
+            </div>
+            <div>
+                <p class="eyebrow">STEW Music Theory Tutor</p>
+                <h1>Music Theory</h1>
+                <p class="subtitle">
+                    A guide for learning
+                </p>
+            </div>
+        </header>
+
+        <section class="panel controls-panel">
+            <div class="section-header">
+                <h2>Controls</h2>
+                <p>Choose what you want to generate.</p>
+            </div>
+
+            <div class="control-grid">
+                <label>
+                    Generator
+                    <select id="generatorType" onchange="toggleGenerator()">
+                        <option value="scale">Scale Generator</option>
+                        <option value="chord">Chord Generator</option>
+                        <option value="progression">Progression Generator</option>
+                    </select>
+                </label>
+
+                <label>
+                    Instrument
+                    <select id="instrumentType" onchange="refreshDiagram()">
+                        <option value="piano">Piano</option>
+                        <option value="guitar">Guitar</option>
+                        <option value="bass">Bass</option>
+                    </select>
+                </label>
+
+                <label>
+                    Root / Key
+                    <input id="rootNote" placeholder="Example: C, Bb, F#">
+                </label>
+
+                <label id="scaleTypeWrapper">
+                    Scale Type
+                    <select id="scaleType">
+                        <option value="major">Major</option>
+                        <option value="minor">Minor</option>
+                        <option value="harmonic_minor">Harmonic Minor</option>
+                        <option value="melodic_minor">Melodic Minor</option>
+                    </select>
+                </label>
+
+                <label id="chordTypeWrapper" style="display: none;">
+                    Chord Type
+                    <select id="chordType">
+                        <option value="major">Major</option>
+                        <option value="minor">Minor</option>
+                        <option value="diminished">Diminished</option>
+                        <option value="augmented">Augmented</option>
+                        <option value="major7">Major 7</option>
+                        <option value="minor7">Minor 7</option>
+                        <option value="dominant7">Dominant 7</option>
+                        <option value="dim7">Diminished 7</option>
+                    </select>
+                </label>
+
+                <label id="progressionStyleWrapper" style="display: none;">
+                    Progression Style
+                    <select id="progressionStyle">
+                        <option value="pop">Pop</option>
+                        <option value="classic">Classic</option>
+                        <option value="jazz">Jazz</option>
+                        <option value="sad">Sad</option>
+                        <option value="minor_pop">Minor Pop</option>
+                    </select>
+                </label>
+            </div>
+            
+            <div class="inline-result-section">
+                <p id="result" class="result-text">
+        Choose your settings and click Generate.
+                </p>
+
+                <div id="progressionChords"></div>
+            </div>
+
+            <div class="inline-explanation-section">
+                <p id="aiExplanation" class="explanation-text">
+                    Generate something, then click Explain This.
+                </p>
+            </div>
+
+            <div class="button-row">
+
+            <div class="button-row">
+                <button class="primary-button" onclick="generate()">Generate</button>
+                <button class="secondary-button" onclick="explainCurrentSelection()">Explain This</button>
+                <button class="secondary-button" onclick="playCurrentSelection()">Play Sound</button>
+            </div>
+        </section>
+
+        <section class="panel visual-panel">
+            <div class="section-header">
+                <h2>Visualizer</h2>
+            </div>
+
+            <div id="diagram"></div>
+        </section>
+
+        <section class="panel chat-panel">
+            <div class="section-header">
+                <h2>STEW Chat Assistant</h2>
+                <p>I'm your personal music tutor! Ask me anything you would like to learn</p>
+            </div>
+
+            <div id="chatMessages" class="chat-messages">
+                <div class="chat-message ai-message">
+                    Hi! Ask me a music theory question.
+                </div>
+            </div>
+
+            <div class="chat-input-row">
+                <input id="chatInput" placeholder="Ask something like: How is a major chord built?">
+                <button class="primary-button" onclick="sendChatMessage()">Send</button>
+            </div>
+        </section>
+    </main>
+
+    <script src="script.js"></script>
+</body>
+</html>
