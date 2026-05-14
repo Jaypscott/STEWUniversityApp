@@ -430,7 +430,8 @@ async function explainCurrentSelection() {
     const explanationBox = document.getElementById("aiExplanation");
 
     if (!currentExplanationContext) {
-        explanationBox.textContent = "Generate a scale, chord, or progression first.";
+        explanationBox.textContent =
+            "Generate a scale, chord, or progression first.";
         return;
     }
 
@@ -449,11 +450,12 @@ async function explainCurrentSelection() {
     const data = await response.json();
 
     if (!response.ok) {
-        explanationBox.textContent = data.detail || "Something went wrong.";
+        explanationBox.textContent =
+            data.detail || "Something went wrong.";
         return;
     }
 
-    explanationBox.textContent = data.response;
+    await typeMessage(explanationBox, data.response);
 }
 
 function playNote(note, startTime, duration = 0.5) {
