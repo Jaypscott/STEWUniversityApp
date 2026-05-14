@@ -1,4 +1,4 @@
-const API_URL = "http://127.0.0.1:8001";
+const API_URL = "https://stew-university-backend.onrender.com";
 
 const noteOrder = [
     "C", "C#", "D", "D#", "E", "F",
