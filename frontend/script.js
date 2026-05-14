@@ -24,6 +24,25 @@ const noteFrequencies = {
     "B": 493.88
 };
 
+const displayNoteMap = {
+    "C": "C",
+    "C#": "C#/Db",
+    "D": "D",
+    "D#": "D#/Eb",
+    "E": "E",
+    "F": "F",
+    "F#": "F#/Gb",
+    "G": "G",
+    "G#": "G#/Ab",
+    "A": "A",
+    "A#": "A#/Bb",
+    "B": "B"
+};
+
+function getDisplayNote(note) {
+    return displayNoteMap[note] || note;
+}
+
 const enharmonicMap = {
     "Bb": "A#",
     "Db": "C#",
@@ -149,7 +168,7 @@ function createFretboard(strings, highlightedNotes = []) {
 
             const fret = document.createElement("div");
             fret.classList.add("fret");
-            fret.textContent = `${note}`;
+            fret.textContent = getDisplayNote(note);
             fret.onclick = () => {
     playSingleNote(note);
 };
