@@ -24,6 +24,23 @@ const noteFrequencies = {
     "B": 493.88
 };
 
+const enharmonicMap = {
+    "Bb": "A#",
+    "Db": "C#",
+    "Eb": "D#",
+    "Gb": "F#",
+    "Ab": "G#",
+    "Cb": "B",
+    "Fb": "E",
+    "E#": "F",
+    "B#": "C"
+};
+
+function toVisualizerNote(note) {
+    const normalized = normalizeNote(note);
+    return enharmonicMap[normalized] || normalized;
+}
+
 let currentHighlightedNotes = [];
 let currentExplanationContext = "";
 let currentPlaybackNotes = [];
@@ -57,8 +74,8 @@ function buildPianoNotes(startOctave = 3, endOctave = 5) {
 
 function getPianoNotePath(root, notesToHighlight) {
     const pianoNotes = buildPianoNotes(3, 5);
-    const normalizedRoot = normalizeNote(root);
-    const normalizedNotes = notesToHighlight.map(note => normalizeNote(note));
+    const normalizedRoot = toVisualizerNote(root);
+    const normalizedNotes = notesToHighlight.map(note => toVisualizerNote(note));
 
     const rootIndex = pianoNotes.findIndex(item => item.note === normalizedRoot);
 
@@ -236,7 +253,7 @@ async function generateScale() {
         return;
     }
 
-    currentHighlightedNotes = data.notes;
+    currentHighlightedNotes = data.notes.map(note => toVisualizerNote(note));
     currentPlaybackNotes = data.notes;
     currentProgression = [];
 
@@ -269,7 +286,7 @@ async function generateChord() {
         return;
     }
 
-    currentHighlightedNotes = data.notes;
+    currentHighlightedNotes = data.notes.map(note => toVisualizerNote(note));
     currentPlaybackNotes = data.notes;
     currentProgression = [];
 
@@ -365,7 +382,7 @@ async function highlightProgressionChord(chord) {
         return;
     }
 
-    currentHighlightedNotes = data.notes;
+    currentHighlightedNotes = data.notes.map(note => toVisualizerNote(note));
     currentPlaybackNotes = data.notes;
 
     document.getElementById("result").textContent =
