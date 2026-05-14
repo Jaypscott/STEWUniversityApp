@@ -55,6 +55,20 @@ const enharmonicMap = {
     "B#": "C"
 };
 
+let audioContext = null;
+
+function getAudioContext() {
+    if (!audioContext) {
+        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    }
+
+    if (audioContext.state === "suspended") {
+        audioContext.resume();
+    }
+
+    return audioContext;
+}
+
 function toVisualizerNote(note) {
     const normalized = normalizeNote(note);
     return enharmonicMap[normalized] || normalized;
@@ -461,7 +475,7 @@ function playNote(note, startTime, duration = 0.5) {
 }
 
 function playNotesSequentially(notes) {
-    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    const audioContext = getAudioContext();
 
     notes.forEach((note, index) => {
         const oscillator = audioContext.createOscillator();
@@ -492,17 +506,18 @@ function playSingleNote(noteWithOctave) {
         return;
     }
 
-    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-    const oscillator = audioContext.createOscillator();
-    const gainNode = audioContext.createGain();
+    const context = getAudioContext();
+
+    const oscillator = context.createOscillator();
+    const gainNode = context.createGain();
 
     oscillator.type = "sine";
     oscillator.frequency.value = frequency;
 
     oscillator.connect(gainNode);
-    gainNode.connect(audioContext.destination);
+    gainNode.connect(context.destination);
 
-    const startTime = audioContext.currentTime;
+    const startTime = context.currentTime;
     const endTime = startTime + 0.6;
 
     gainNode.gain.setValueAtTime(0.2, startTime);
@@ -513,7 +528,7 @@ function playSingleNote(noteWithOctave) {
 }
 
 function playChord(notes) {
-    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    const audioContext = getAudioContext();
 
     notes.forEach(note => {
         const oscillator = audioContext.createOscillator();
