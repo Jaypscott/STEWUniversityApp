@@ -1,0 +1,28 @@
+{
+  "name": "@audio-samples/piano-velocity8",
+  "description": "Salamander Grand Piano V3 OGG samples",
+  "version": "1.0.5",
+  "author": {
+    "email": "ensonador@gmail.com",
+    "name": "Jan Forst",
+    "url": "https://github.com/darosh"
+  },
+  "bugs": "https://github.com/darosh/samples-piano/issues",
+  "homepage": "https://github.com/darosh/samples-piano",
+  "keywords": [
+    "audio",
+    "ogg",
+    "piano",
+    "samples"
+  ],
+  "license": "MIT",
+  "main": "index.js",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/darosh/samples-piano.git"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "gitHead": "9ebff355ffa740107d93aecdeb148cd46f653ea4"
+}

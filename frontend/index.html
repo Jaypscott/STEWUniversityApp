@@ -2,7 +2,7 @@
 <html>
 <head>
     <title>Music Theory</title>
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="style.css?v=29">
 </head>
 <body>
     <div class="background-music">
@@ -37,6 +37,120 @@
             </div>
         </header>
 
+        <section class="songwriting-screen app-view active-view" id="songwriting" aria-labelledby="songwritingTitle">
+            <div class="songwriting-shell">
+                <p class="songwriting-kicker">Songwriting Assistant</p>
+                <h2 id="songwritingTitle">What can I help you write?</h2>
+
+                <div class="songwriting-composer" id="songwritingComposer">
+                    <div class="songwriting-conversation-header">
+                        <div>
+                            <p>Songwriting Assistant</p>
+                            <span>Melody, harmony, lyrics, structure, and creative direction.</span>
+                        </div>
+                        <button
+                            class="songwriting-close"
+                            type="button"
+                            onclick="closeSongwritingConversation()"
+                            aria-label="Close songwriting conversation"
+                        >
+                            X
+                        </button>
+                    </div>
+
+                    <div
+                        class="songwriting-messages"
+                        id="songwritingMessages"
+                        aria-live="polite"
+                    ></div>
+
+                    <form class="songwriting-input-wrap" onsubmit="sendSongwritingMessage(event)">
+                        <input
+                            id="songwritingInput"
+                            placeholder="Mood, genre, artist inspiration, story idea..."
+                            autocomplete="off"
+                        >
+                        <button class="songwriting-send" type="submit">Send</button>
+                    </form>
+                </div>
+            </div>
+        </section>
+
+        <section class="ear-training-screen app-view" id="earTraining" aria-labelledby="earTrainingTitle">
+            <div class="ear-training-shell">
+                <div class="ear-training-header">
+                    <div>
+                        <p class="ear-training-kicker">Ear Training</p>
+                        <h2 id="earTrainingTitle">Train your musical ear</h2>
+                    </div>
+                    <div class="ear-score-card">
+                        <span id="earScore">0 / 0</span>
+                        <small>Score</small>
+                    </div>
+                </div>
+
+                <div class="ear-training-grid">
+                    <section class="ear-card ear-question-card">
+                        <div class="ear-mode-toggle" aria-label="Ear training mode">
+                            <button class="ear-mode-button active" type="button" data-ear-mode="interval">
+                                Intervals
+                            </button>
+                            <button class="ear-mode-button" type="button" data-ear-mode="chord">
+                                Chords
+                            </button>
+                        </div>
+
+                        <p class="ear-prompt" id="earPrompt">
+                            Play two notes, then choose the interval you hear.
+                        </p>
+
+                        <div class="ear-play-row">
+                            <button class="primary-button ear-play-button" id="earPlayButton" type="button">
+                                Play
+                            </button>
+                            <button class="secondary-button" id="earNewQuestionButton" type="button">
+                                New Question
+                            </button>
+                        </div>
+
+                        <div class="ear-status" id="earStatus">
+                            Press Play to begin.
+                        </div>
+                    </section>
+
+                    <section class="ear-card">
+                        <div class="ear-answer-header">
+                            <h3>Choose an answer</h3>
+                            <span id="earQuestionLabel">Interval Question</span>
+                        </div>
+
+                        <div class="ear-answer-grid" id="earAnswerGrid"></div>
+                    </section>
+                </div>
+
+                <section class="ear-card ear-explanation-card">
+                    <div class="ear-answer-header">
+                        <h3>Explanation</h3>
+                        <button class="secondary-button" id="earExplainButton" type="button">
+                            Explain This
+                        </button>
+                    </div>
+                    <p id="earExplanation">
+                        Answer a question, then ask for a short listening tip.
+                    </p>
+                </section>
+
+                <p class="sample-credit">
+                    Piano samples: Salamander Grand Piano V3 by Alexander Holm, CC BY 3.0.
+                </p>
+            </div>
+        </section>
+
+        <section class="jam-screen app-view" id="jam" aria-labelledby="jamTitle">
+            <h2 id="jamTitle">Coming Soon...</h2>
+        </section>
+
+        <div class="theory-workspace app-view" id="theoryWorkspace">
         <section class="panel controls-panel">
             <div class="section-header">
                 <h2>Controls</h2>
@@ -55,7 +169,7 @@
 
                 <label>
                     Instrument
-                    <select id="instrumentType" onchange="refreshDiagram()">
+                    <select id="instrumentType" onchange="handleInstrumentChange()">
                         <option value="piano">Piano</option>
                         <option value="guitar">Guitar</option>
                         <option value="bass">Bass</option>
@@ -91,6 +205,15 @@
                     </select>
                 </label>
 
+                <label id="inversionWrapper" style="display: none;">
+                    Inversion
+                    <select id="guitarShape" onchange="refreshDiagram()">
+                        <option value="shape1">Shape 1</option>
+                        <option value="shape2">Shape 2</option>
+                        <option value="shape3">Shape 3</option>
+                    </select>
+                </label>
+
                 <label id="progressionStyleWrapper" style="display: none;">
                     Progression Style
                     <select id="progressionStyle">
@@ -118,20 +241,21 @@
             </div>
 
             <div class="button-row">
-
-            <div class="button-row">
                 <button class="primary-button" onclick="generate()">Generate</button>
                 <button class="secondary-button" onclick="explainCurrentSelection()">Explain This</button>
                 <button class="secondary-button" onclick="playCurrentSelection()">Play Sound</button>
             </div>
         </section>
 
-        <section class="panel visual-panel">
+        <section class="panel visual-panel" id="visualizer">
             <div class="section-header">
                 <h2>Visualizer</h2>
             </div>
 
             <div id="diagram"></div>
+            <p class="sample-credit">
+                Guitar and bass samples: ToneJS instrument samples, CC BY 3.0.
+            </p>
         </section>
 
         <section class="panel chat-panel">
@@ -147,12 +271,22 @@
             </div>
 
             <div class="chat-input-row">
-                <input id="chatInput" placeholder="Ask something like: How is a major chord built?">
+                <div class="ai-input-glow">
+                    <input id="chatInput" placeholder="Ask something like: How is a major chord built?">
+                </div>
                 <button class="primary-button" onclick="sendChatMessage()">Send</button>
             </div>
         </section>
+        </div>
+
+        <nav class="bottom-nav" aria-label="Music Theory sections">
+            <a class="bottom-nav-link active" href="#songwriting" data-view="songwriting">Songwriting</a>
+            <a class="bottom-nav-link" href="#jam" data-view="jam">Jam</a>
+            <a class="bottom-nav-link" href="#ear-training" data-view="ear-training">Ear Training</a>
+            <a class="bottom-nav-link" href="#visualizer" data-view="visualizer">Visualizer</a>
+        </nav>
     </main>
 
-    <script src="script.js"></script>
+    <script src="script.js?v=29"></script>
 </body>
 </html>
