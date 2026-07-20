@@ -93,6 +93,17 @@ final class STEWUniversityTests: XCTestCase {
         XCTAssertNotNil(object["created_by_user_id"])
     }
 
+    func testBandUserDecodesProductionURLFields() throws {
+        let json = #"{"id":"00000000-0000-0000-0000-000000000001","username":"jaylon","display_name":"Jaylon","is_platform_admin":false,"profile_complete":true,"terms_url":"https://stew-university-backend.onrender.com/legal/terms","privacy_url":"https://stew-university-backend.onrender.com/legal/privacy","support_url":"https://stew-university-backend.onrender.com/support"}"#
+
+        let user = try BandJSONCoding.decoder().decode(BandUser.self, from: Data(json.utf8))
+
+        XCTAssertTrue(user.profileComplete)
+        XCTAssertEqual(user.termsURL.path, "/legal/terms")
+        XCTAssertEqual(user.privacyURL.path, "/legal/privacy")
+        XCTAssertEqual(user.supportURL.path, "/support")
+    }
+
     @MainActor
     func testBandDemoProvidersRepresentEmptyAndPopulatedStates() async {
         let empty = BandStore(provider: DemoBandProvider(populated: false))

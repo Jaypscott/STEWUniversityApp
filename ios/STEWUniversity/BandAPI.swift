@@ -624,7 +624,10 @@ enum BandJSONCoding {
             let parts = source.split(separator: "_").map(String.init)
             guard parts.count > 1 else { return BandCodingKey(source) }
             let key = parts[0] + parts.dropFirst().map { part in
-                part == "id" || part == "ids" ? part.uppercased() : part.capitalized
+                switch part {
+                case "id", "ids", "url", "urls": part.uppercased()
+                default: part.capitalized
+                }
             }.joined()
             return BandCodingKey(key)
         }
