@@ -2,18 +2,30 @@ import os
 from dotenv import load_dotenv
 from openai import OpenAI
 
-from app.ai.prompts import SYSTEM_PROMPT
+from app.ai.prompts import MODE_PROMPTS
+from app.config.settings import settings
+from app.models.schemas import ChatHistoryItem, ChatMode
 
 load_dotenv()
 
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 
-def ask_music_theory_ai(user_message: str) -> str:
+def ask_music_theory_ai(
+    user_message: str,
+    mode: ChatMode = ChatMode.general,
+    history: list[ChatHistoryItem] | None = None,
+) -> str:
+    conversation = [
+        {"role": item.role, "content": item.content}
+        for item in (history or [])[-8:]
+    ]
+    conversation.append({"role": "user", "content": user_message})
     response = client.responses.create(
         model="gpt-4o-mini",
-        instructions=SYSTEM_PROMPT,
-        input=user_message,
+        instructions=MODE_PROMPTS[mode.value],
+        input=conversation,
+        max_output_tokens=settings.ai_max_output_tokens,
     )
 
     return response.output_text
