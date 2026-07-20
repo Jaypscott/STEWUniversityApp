@@ -20,7 +20,9 @@ R2 and Apple credentials are not required for model/authorization tests. Real au
 
 1. Create a private R2 bucket. Keep public access disabled and create credentials limited to object read, write, and delete for that bucket.
 2. Configure the Apple App ID for Sign in with Apple, Push Notifications, and Associated Domains. Create separate Sign in with Apple and APNs keys if desired.
-3. Publish real Terms, Privacy, Support, and Safety pages.
+3. Review the launch-draft Terms, Privacy, Support, and Safety pages served at
+   `/legal/terms`, `/legal/privacy`, `/support`, and `/safety`. Keep the Render
+   URL values in `.env.example` synchronized if the public hostname changes.
 4. Create a manually managed Render environment group named `stew-band-secrets` from `.env.example`, then sync `render.yaml`. The Blueprint references this existing group but deliberately does not manage its secret values. Confirm the stable public hostname matches `PUBLIC_BASE_URL` and the iOS Associated Domains entitlement.
 5. Let the web service pre-deploy command apply Alembic migrations. Do not use `BAND_AUTO_CREATE_DB` in production.
 6. Verify `/health/ready`, the web and worker logs, the upload-cleanup cron, the AASA response, and APNs sandbox before switching APNs to production.

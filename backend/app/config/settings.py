@@ -39,11 +39,11 @@ class Settings:
     r2_bucket_name = os.getenv("R2_BUCKET_NAME", "")
 
     # App-facing legal and support destinations.
-    terms_url = os.getenv("TERMS_URL", "https://example.com/terms")
-    privacy_url = os.getenv("PRIVACY_URL", "https://example.com/privacy")
-    support_url = os.getenv("SUPPORT_URL", "https://example.com/support")
-    safety_contact_url = os.getenv("SAFETY_CONTACT_URL", support_url)
-    terms_version = os.getenv("TERMS_VERSION", "2026-01")
+    terms_url = os.getenv("TERMS_URL", f"{public_base_url}/legal/terms")
+    privacy_url = os.getenv("PRIVACY_URL", f"{public_base_url}/legal/privacy")
+    support_url = os.getenv("SUPPORT_URL", f"{public_base_url}/support")
+    safety_contact_url = os.getenv("SAFETY_CONTACT_URL", f"{public_base_url}/safety")
+    terms_version = os.getenv("TERMS_VERSION", "2026-07-20")
 
     band_inline_jobs = os.getenv("BAND_INLINE_JOBS", "false").lower() == "true"
     band_auto_create_db = os.getenv("BAND_AUTO_CREATE_DB", "false").lower() == "true"

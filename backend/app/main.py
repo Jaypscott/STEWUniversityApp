@@ -15,6 +15,7 @@ from app.band.database import create_development_tables
 from app.band.database import engine
 from app.band.errors import BandAPIError, band_error_handler
 from app.band.queue import band_queue
+from app.public_pages import router as public_pages_router
 from sqlalchemy import text
 
 
@@ -46,6 +47,7 @@ app.include_router(chords_router)
 app.include_router(intervals_router)
 app.include_router(progressions_router)
 app.include_router(band_router)
+app.include_router(public_pages_router)
 app.add_exception_handler(BandAPIError, band_error_handler)
 
 @app.get("/")
