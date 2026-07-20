@@ -1,0 +1,71 @@
+services:
+  - type: web
+    name: stew-university-backend
+    runtime: docker
+    plan: starter
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    dockerCommand: uvicorn app.main:app --host 0.0.0.0 --port 10000
+    preDeployCommand: alembic -c alembic.ini upgrade head
+    healthCheckPath: /health/ready
+    envVars:
+      - fromGroup: stew-band-secrets
+      - key: DATABASE_URL
+        fromDatabase:
+          name: stew-band-postgres
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          name: stew-band-key-value
+          type: keyvalue
+          property: connectionString
+
+  - type: worker
+    name: stew-band-worker
+    runtime: docker
+    plan: starter
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    dockerCommand: rq worker media notifications --url "$REDIS_URL"
+    envVars:
+      - fromGroup: stew-band-secrets
+      - key: DATABASE_URL
+        fromDatabase:
+          name: stew-band-postgres
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          name: stew-band-key-value
+          type: keyvalue
+          property: connectionString
+
+  - type: cron
+    name: stew-band-upload-cleanup
+    runtime: docker
+    schedule: "*/15 * * * *"
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    dockerCommand: python -c "from app.band.jobs import cleanup_expired_uploads_job; cleanup_expired_uploads_job()"
+    envVars:
+      - fromGroup: stew-band-secrets
+      - key: DATABASE_URL
+        fromDatabase:
+          name: stew-band-postgres
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          name: stew-band-key-value
+          type: keyvalue
+          property: connectionString
+
+  - type: keyvalue
+    name: stew-band-key-value
+    plan: starter
+    ipAllowList: []
+    maxmemoryPolicy: noeviction
+    persistenceMode: journal-snapshot
+
+databases:
+  - name: stew-band-postgres
+    databaseName: stew_band
+    user: stew_band

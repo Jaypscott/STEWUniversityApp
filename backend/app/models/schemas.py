@@ -1,12 +1,49 @@
-from pydantic import BaseModel
+from datetime import datetime
+from enum import Enum
+
+from pydantic import BaseModel, Field, field_validator
+
+
+class ChatMode(str, Enum):
+    general = "general"
+    songwriting = "songwriting"
+    ear_explanation = "ear_explanation"
+    theory_chat = "theory_chat"
+
+
+class ChatHistoryItem(BaseModel):
+    role: str
+    content: str = Field(min_length=1, max_length=1200)
+
+    @field_validator("role")
+    @classmethod
+    def validate_role(cls, value: str) -> str:
+        normalized = value.strip().lower()
+        if normalized not in {"user", "assistant"}:
+            raise ValueError("role must be user or assistant")
+        return normalized
 
 
 class ChatRequest(BaseModel):
-    message: str
+    message: str = Field(min_length=1, max_length=1200)
+    mode: ChatMode = ChatMode.general
+    history: list[ChatHistoryItem] = Field(default_factory=list, max_length=8)
+    installation_id: str | None = Field(default=None, min_length=16, max_length=128)
+
+    @field_validator("message")
+    @classmethod
+    def message_must_not_be_blank(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("message must not be blank")
+        return value
 
 
 class ChatResponse(BaseModel):
     response: str
+    remaining: int | None = None
+    limit: int | None = None
+    reset_at: datetime | None = None
 
 
 class ScaleRequest(BaseModel):
