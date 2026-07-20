@@ -6,7 +6,7 @@ services:
     dockerfilePath: ./backend/Dockerfile
     dockerContext: ./backend
     dockerCommand: uvicorn app.main:app --host 0.0.0.0 --port 10000
-    preDeployCommand: alembic -c alembic.ini upgrade head
+    preDeployCommand: ./run_migrations.py
     healthCheckPath: /health/ready
     envVars:
       - fromGroup: stew-band-secrets
