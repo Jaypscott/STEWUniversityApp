@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Run the production Alembic migration without relying on command parsing."""
+"""Run production migrations without relying on command-line parsing."""
 
-from alembic.config import main
+from alembic import command
+from alembic.config import Config
 
 
 if __name__ == "__main__":
-    main(argv=["-c", "alembic.ini", "upgrade", "head"])
+    command.upgrade(Config("alembic.ini"), "head")
