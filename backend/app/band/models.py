@@ -173,13 +173,17 @@ class AuthSession(Base):
 
 class DeviceRegistration(Base):
     __tablename__ = "device_registrations"
-    __table_args__ = (UniqueConstraint("user_id", "device_token"),)
+    __table_args__ = (
+        UniqueConstraint("user_id", "device_token"),
+        Index("uq_devices_user_installation", "user_id", "installation_id", unique=True),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
     user_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("users.id", ondelete="CASCADE"), index=True
     )
     device_token: Mapped[str] = mapped_column(String(200))
+    installation_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, index=True)
     environment: Mapped[str] = mapped_column(String(20), default="sandbox")
     notifications_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

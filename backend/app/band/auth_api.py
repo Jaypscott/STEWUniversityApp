@@ -39,6 +39,7 @@ from app.band.security import (
 )
 from app.band.service import profile_complete, require_complete_profile
 from app.config.settings import settings
+from app.progress.service import get_or_create_profile
 
 
 router = APIRouter(prefix="/v1", tags=["Band authentication"])
@@ -88,6 +89,7 @@ async def authenticate_with_apple(
     user.is_platform_admin = claims.subject in settings.platform_admin_apple_subjects
     if exchange.refresh_token:
         identity.encrypted_refresh_token = encrypt_secret(exchange.refresh_token)
+    await get_or_create_profile(session, user.id)
     access, refresh, access_exp, refresh_exp, _ = await create_session_tokens(
         session, user.id
     )
@@ -172,19 +174,31 @@ async def register_device(
     session: AsyncSession = Depends(get_session),
 ) -> Response:
     require_complete_profile(user)
-    registration = await session.scalar(
-        select(DeviceRegistration).where(
-            DeviceRegistration.user_id == user.id,
-            DeviceRegistration.device_token == body.device_token,
+    registration = None
+    if body.installation_id is not None:
+        registration = await session.scalar(
+            select(DeviceRegistration).where(
+                DeviceRegistration.user_id == user.id,
+                DeviceRegistration.installation_id == body.installation_id,
+            )
         )
-    )
+    if registration is None:
+        registration = await session.scalar(
+            select(DeviceRegistration).where(
+                DeviceRegistration.user_id == user.id,
+                DeviceRegistration.device_token == body.device_token,
+            )
+        )
     if registration is None:
         registration = DeviceRegistration(
             user_id=user.id,
             device_token=body.device_token,
+            installation_id=body.installation_id,
             environment=body.environment,
         )
         session.add(registration)
+    registration.device_token = body.device_token
+    registration.installation_id = body.installation_id
     registration.environment = body.environment
     registration.notifications_enabled = body.notifications_enabled
     registration.updated_at = utcnow()

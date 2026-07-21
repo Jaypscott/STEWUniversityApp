@@ -38,6 +38,7 @@ async def create_development_tables() -> None:
     if not settings.band_auto_create_db:
         return
     from app.band import models  # noqa: F401
+    from app.progress import models as progress_models  # noqa: F401
 
     async with engine.begin() as connection:
         await connection.run_sync(Base.metadata.create_all)

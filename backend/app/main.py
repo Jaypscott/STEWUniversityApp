@@ -16,6 +16,7 @@ from app.band.database import engine
 from app.band.errors import BandAPIError, band_error_handler
 from app.band.queue import band_queue
 from app.public_pages import router as public_pages_router
+from app.progress.api import router as progress_router
 from sqlalchemy import text
 
 
@@ -28,7 +29,7 @@ async def lifespan(_: FastAPI):
 app = FastAPI(
     title="Music Theory AI",
     description="An AI-powered music theory tutor API",
-    version="0.11",
+    version="0.12",
     lifespan=lifespan,
 )
 
@@ -47,6 +48,7 @@ app.include_router(chords_router)
 app.include_router(intervals_router)
 app.include_router(progressions_router)
 app.include_router(band_router)
+app.include_router(progress_router)
 app.include_router(public_pages_router)
 app.add_exception_handler(BandAPIError, band_error_handler)
 
