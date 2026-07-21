@@ -13,6 +13,7 @@ struct AppShellView: View {
     @EnvironmentObject private var bandAuth: BandAuthSession
     @EnvironmentObject private var bandStore: BandStore
     @EnvironmentObject private var bandNotifications: BandNotificationStore
+    @EnvironmentObject private var progressSync: ProgressSyncCoordinator
 
     init() {
         let arguments = ProcessInfo.processInfo.arguments
@@ -38,10 +39,15 @@ struct AppShellView: View {
                 compactLayout
             }
         }
+        .task {
+            await bandAuth.restore()
+            await progressSync.handleForeground()
+        }
         .onChange(of: scenePhase) { _, phase in
             guard phase == .active else { return }
             Task { await earTrainingProgress.handleForeground() }
             gameProgress.reconcile()
+            Task { await progressSync.handleForeground() }
             if let user = bandAuth.currentUser {
                 Task {
                     await bandStore.load(userID: user.id, force: true)
@@ -54,6 +60,23 @@ struct AppShellView: View {
         .onReceive(NotificationCenter.default.publisher(for: .bandNotificationRoute)) { _ in
             destination = .band
         }
+        .onReceive(NotificationCenter.default.publisher(for: .progressInvalidated)) { _ in
+            Task { await progressSync.synchronize() }
+        }
+        .onChange(of: destination) { _, value in
+            if value == .games || value == .earTraining {
+                Task { await progressSync.synchronize() }
+            }
+        }
+        .fullScreenCover(
+            isPresented: Binding(
+                get: { progressSync.requiresImportChoice },
+                set: { _ in }
+            )
+        ) {
+            ProgressImportChoiceView()
+                .environmentObject(progressSync)
+        }
     }
 
     private var usesRegularSidebar: Bool {
@@ -65,6 +88,7 @@ struct AppShellView: View {
             GeometryReader { geometry in
                 ZStack(alignment: .leading) {
                     content
+                        .refreshable { await progressSync.synchronize() }
                         .disabled(drawerOpen)
 
                     if drawerOpen {
@@ -127,6 +151,7 @@ struct AppShellView: View {
         } detail: {
             NavigationStack {
                 content
+                    .refreshable { await progressSync.synchronize() }
                     .navigationTitle(destination.rawValue)
                     .navigationBarTitleDisplayMode(.inline)
             }
@@ -138,6 +163,7 @@ struct AppShellView: View {
 
     @ViewBuilder private var content: some View {
         switch destination {
+        case .account: AccountView()
         case .songwriting: SongwritingView()
         case .jam: JamView(selectedInstrument: $selectedJamInstrument)
         case .band: BandView()

@@ -1,6 +1,7 @@
 import Foundation
 
 enum AppDestination: String, CaseIterable, Identifiable {
+    case account = "Account"
     case songwriting = "Songwriting"
     case jam = "Jam"
     case band = "Band"
@@ -11,6 +12,7 @@ enum AppDestination: String, CaseIterable, Identifiable {
     var id: String { rawValue }
     var symbol: String {
         switch self {
+        case .account: "person.crop.circle"
         case .songwriting: "pencil.line"
         case .jam: "waveform"
         case .band: "person.3"

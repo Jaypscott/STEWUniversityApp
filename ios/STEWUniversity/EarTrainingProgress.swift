@@ -330,10 +330,16 @@ final class EarTrainingProgressStore: ObservableObject {
     @Published private(set) var profile: EarTrainingProfile
     @Published var notificationPermissionDenied = false
 
+    var accountAnswerSink: ((String, EarTrainingMode, Bool) -> Void)?
+    var accountDailyGoalSink: ((Int) -> Void)?
+    var accountLocalChangeSink: (() -> Void)?
+
     private let persistence: EarTrainingProfilePersisting
     private let reminderScheduler: EarTrainingReminderScheduling
     private var calendar: Calendar
     private let now: () -> Date
+    private var guestProfile: EarTrainingProfile
+    private(set) var isAccountMode = false
 
     init(
         persistence: EarTrainingProfilePersisting = UserDefaultsEarTrainingPersistence(),
@@ -345,9 +351,13 @@ final class EarTrainingProgressStore: ObservableObject {
         self.reminderScheduler = reminderScheduler
         self.calendar = calendar
         self.now = now
-        profile = persistence.load() ?? EarTrainingProfile()
+        let loaded = persistence.load() ?? EarTrainingProfile()
+        profile = loaded
+        guestProfile = loaded
         reconcile(for: now())
     }
+
+    var guestProfileSnapshot: EarTrainingProfile { guestProfile }
 
     var today: DailyPracticeRecord { profile.today! }
     var level: ListenerLevel { .level(for: profile.totalXP) }
@@ -376,6 +386,7 @@ final class EarTrainingProgressStore: ObservableObject {
         let completed = awardGoalIfNeeded(on: now())
         if completed, profile.remindersEnabled { reminderScheduler.cancel() }
         save()
+        if isAccountMode { accountDailyGoalSink?(goal) }
     }
 
     func setReminder(enabled: Bool) async {
@@ -436,6 +447,7 @@ final class EarTrainingProgressStore: ObservableObject {
         let challengeCompleted = awardChallengeIfNeeded()
         evaluateAchievements()
         save()
+        if isAccountMode { accountAnswerSink?(question.skillID, question.mode, wasCorrect) }
         let unlockedSet = profile.unlockedAchievements.subtracting(previousAchievements)
         let newAchievements = AchievementID.allCases.filter(unlockedSet.contains)
         if goalCompleted, profile.remindersEnabled { reminderScheduler.cancel() }
@@ -556,7 +568,65 @@ final class EarTrainingProgressStore: ObservableObject {
         await reminderScheduler.scheduleNext(hour: profile.reminderHour, minute: profile.reminderMinute, now: schedulingDate, calendar: calendar)
     }
 
-    private func save() { persistence.save(profile) }
+    func activateAccountProfile(_ accountProfile: EarTrainingProfile) {
+        isAccountMode = true
+        profile = accountProfile
+        reconcile()
+    }
+
+    func applyAccountSnapshot(_ snapshot: ProgressSnapshot) {
+        let reminderSource = profile
+        let synced = snapshot.earTraining
+        let challengeKind = DailyChallengeKind(rawValue: synced.today.challengeKind) ?? .comboThree
+        var value = EarTrainingProfile()
+        value.totalXP = snapshot.account.xp
+        value.currentStreak = synced.currentStreak
+        value.longestStreak = synced.longestStreak
+        value.lastGoalCompletionDay = synced.completedGoalDays.last
+        value.dailyGoal = snapshot.preferences.dailyGoal
+        value.mastery = synced.mastery.mapValues {
+            SkillMastery(attempts: $0.attempts, correct: $0.correct, score: $0.score)
+        }
+        value.unlockedAchievements = Set(synced.achievements.compactMap(AchievementID.init(rawValue:)))
+        value.remindersEnabled = reminderSource.remindersEnabled
+        value.reminderHour = reminderSource.reminderHour
+        value.reminderMinute = reminderSource.reminderMinute
+        value.completedGoalDays = synced.completedGoalDays
+        value.today = DailyPracticeRecord(
+            dayKey: synced.today.day,
+            answered: synced.today.answered,
+            correct: synced.today.correct,
+            xpEarned: synced.today.xpEarned,
+            currentCombo: 0,
+            bestCombo: synced.today.bestCombo,
+            perfectRun: 0,
+            goalRewardAwarded: synced.today.goalCompleted,
+            challenge: DailyChallenge(
+                dayKey: synced.today.day,
+                kind: challengeKind,
+                progress: synced.today.challengeProgress,
+                completed: synced.today.challengeCompleted
+            )
+        )
+        isAccountMode = true
+        profile = value
+        accountLocalChangeSink?()
+    }
+
+    func restoreGuestProfile() {
+        isAccountMode = false
+        profile = guestProfile
+        reconcile()
+    }
+
+    private func save() {
+        if isAccountMode {
+            accountLocalChangeSink?()
+        } else {
+            guestProfile = profile
+            persistence.save(profile)
+        }
+    }
     private func dayKey(for date: Date) -> String {
         let parts = calendar.dateComponents([.year, .month, .day], from: date)
         return String(format: "%04d-%02d-%02d", parts.year ?? 0, parts.month ?? 0, parts.day ?? 0)
