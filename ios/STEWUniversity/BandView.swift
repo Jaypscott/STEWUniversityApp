@@ -1616,6 +1616,7 @@ private struct BandSettingsView: View {
     @EnvironmentObject private var uploads: MediaUploadManager
     @ObservedObject private var push = BandPushManager.shared
     @State private var showDeleteConfirmation = false
+    @State private var showAppearanceSettings = false
     @State private var accountError: String?
 
     var body: some View {
@@ -1634,11 +1635,12 @@ private struct BandSettingsView: View {
                     }
                     if band.role?.canManageAppearance == true {
                         Section("Appearance") {
-                            NavigationLink {
-                                BandAppearanceSettingsView()
+                            Button {
+                                showAppearanceSettings = true
                             } label: {
                                 Label("Logo, color, and featured project", systemImage: "paintpalette")
                             }
+                            .buttonStyle(.plain)
                             .accessibilityIdentifier("band-appearance-settings-link")
                         }
                     }
@@ -1676,6 +1678,9 @@ private struct BandSettingsView: View {
                 }
             }
             .navigationTitle("Band settings")
+            .navigationDestination(isPresented: $showAppearanceSettings) {
+                BandAppearanceSettingsView()
+            }
             .task { await push.refreshStatus() }
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
             .alert("Delete your account?", isPresented: $showDeleteConfirmation) {
