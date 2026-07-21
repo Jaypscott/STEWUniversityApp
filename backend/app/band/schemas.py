@@ -70,6 +70,7 @@ class ProfileUpdate(BaseModel):
 
 class DeviceRequest(BaseModel):
     device_token: str = Field(min_length=32, max_length=200)
+    installation_id: UUID | None = None
     environment: str = Field(pattern="^(sandbox|production)$")
     notifications_enabled: bool = True
 

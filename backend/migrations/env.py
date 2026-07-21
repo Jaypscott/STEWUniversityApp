@@ -5,6 +5,7 @@ from sqlalchemy import engine_from_config, pool
 
 from app.band.database import Base, _async_database_url
 from app.band import models  # noqa: F401
+from app.progress import models as progress_models  # noqa: F401
 from app.config.settings import settings
 
 
