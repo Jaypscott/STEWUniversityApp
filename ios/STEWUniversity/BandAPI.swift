@@ -9,9 +9,9 @@ enum BandAPIError: LocalizedError, Equatable {
 
     var errorDescription: String? {
         switch self {
-        case .authenticationRequired: "Sign in to use Band."
+        case .authenticationRequired: "Sign in to your STEW Account."
         case let .server(_, message, _): message
-        case .invalidResponse: "The Band service returned an unreadable response."
+        case .invalidResponse: "The STEW service returned an unreadable response."
         case let .transport(message): message
         }
     }
@@ -68,21 +68,23 @@ protocol BandMediaProviding: Sendable {
     func mediaAccess(assetID: UUID) async throws -> BandMediaAccess
 }
 
-actor BandAPIClient: BandProviding, BandMediaProviding {
-    static let shared = BandAPIClient()
+typealias BandAPIClient = STEWAPIClient
+
+actor STEWAPIClient: BandProviding, BandMediaProviding, ProgressAPIProviding {
+    static let shared = STEWAPIClient()
 
     private let session: URLSession
     private let baseURL: URL
     private let decoder: JSONDecoder
     private let encoder: JSONEncoder
-    private let tokenStore: BandTokenStore
+    private let tokenStore: AccountTokenStore
     private var accessToken: String?
     private var refreshTask: Task<BandAuthTokens, Error>?
 
     init(
         baseURL: URL? = nil,
         session: URLSession = .shared,
-        tokenStore: BandTokenStore = BandTokenStore()
+        tokenStore: AccountTokenStore = AccountTokenStore()
     ) {
         self.baseURL = baseURL
             ?? (Bundle.main.object(forInfoDictionaryKey: "BAND_API_BASE_URL") as? String).flatMap(URL.init(string:))
@@ -141,13 +143,46 @@ actor BandAPIClient: BandProviding, BandMediaProviding {
         )
     }
 
-    func registerDevice(token: String, environment: String, enabled: Bool = true) async throws {
+    func registerDevice(
+        token: String,
+        installationID: UUID = AppInstallation.identifier,
+        environment: String,
+        enabled: Bool = true
+    ) async throws {
         let _: EmptyResponse = try await request(
             "v1/me/devices",
             method: "PUT",
-            body: DeviceBody(deviceToken: token, environment: environment, notificationsEnabled: enabled),
+            body: DeviceBody(
+                deviceToken: token,
+                installationID: installationID,
+                environment: environment,
+                notificationsEnabled: enabled
+            ),
             acceptsEmptyResponse: true
         )
+    }
+
+    func fetchProgress() async throws -> ProgressSnapshot {
+        try await request("v1/progress")
+    }
+
+    func sendProgressEvents(_ events: [ProgressEventEnvelope]) async throws -> ProgressBatchResponse {
+        try await request(
+            "v1/progress/events", method: "POST", body: ProgressEventsBody(events: events)
+        )
+    }
+
+    func importProgress(_ body: ProgressImportBody) async throws -> ProgressImportResponse {
+        try await request("v1/progress/import", method: "POST", body: body)
+    }
+
+    func updateProgressPreferences(dailyGoal: Int?, timeZone: String?) async throws -> ProgressSnapshot {
+        let response: ProgressPreferencesResponse = try await request(
+            "v1/progress/preferences",
+            method: "PATCH",
+            body: ProgressPreferencesBody(dailyGoal: dailyGoal, timeZone: timeZone)
+        )
+        return response.snapshot
     }
 
     func logout() async {
@@ -573,7 +608,7 @@ actor BandAPIClient: BandProviding, BandMediaProviding {
             }
             throw BandAPIError.server(
                 code: "http_\(http.statusCode)",
-                message: "Band is temporarily unavailable.",
+                message: "STEW is temporarily unavailable.",
                 field: nil
             )
         }
@@ -663,7 +698,7 @@ private struct BandCodingKey: CodingKey {
     init?(intValue: Int) { return nil }
 }
 
-final class BandTokenStore: @unchecked Sendable {
+final class AccountTokenStore: @unchecked Sendable {
     private let service = "com.stewuniversity.ios.band"
     private let account = "refresh-token"
 
@@ -696,6 +731,8 @@ final class BandTokenStore: @unchecked Sendable {
     }
 }
 
+typealias BandTokenStore = AccountTokenStore
+
 private struct BandErrorEnvelope: Decodable {
     struct Detail: Decodable { let code: String; let message: String; let field: String? }
     let detail: Detail
@@ -706,7 +743,12 @@ private struct AppleAuthBody: Encodable { let identityToken: String; let authori
 private struct AppleDeleteBody: Encodable { let identityToken: String; let authorizationCode: String; let nonce: String }
 private struct RefreshBody: Encodable { let refreshToken: String }
 private struct ProfileBody: Encodable { let username: String; let displayName: String; let birthYear: Int; let acceptsTerms: Bool }
-private struct DeviceBody: Encodable { let deviceToken: String; let environment: String; let notificationsEnabled: Bool }
+private struct DeviceBody: Encodable {
+    let deviceToken: String
+    let installationID: UUID
+    let environment: String
+    let notificationsEnabled: Bool
+}
 private struct BandCreateBody: Encodable { let name: String; let description: String }
 private struct BandAppearanceBody: Encodable {
     let imageAssetID: UUID?

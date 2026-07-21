@@ -319,13 +319,15 @@ struct BandContentReport: Identifiable, Codable, Equatable, Sendable {
     let resolvedAt: Date?
 }
 
-struct BandAuthTokens: Codable, Equatable, Sendable {
+struct AccountAuthTokens: Codable, Equatable, Sendable {
     let accessToken: String
     let refreshToken: String
     let accessExpiresAt: Date
     let refreshExpiresAt: Date
     let profileRequired: Bool
 }
+
+typealias BandAuthTokens = AccountAuthTokens
 
 struct BandPage<Item: Codable & Sendable>: Codable, Sendable {
     let items: [Item]

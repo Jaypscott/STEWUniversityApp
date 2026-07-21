@@ -1,6 +1,7 @@
 import XCTest
 import AuthenticationServices
 import ImageIO
+import SwiftData
 import UIKit
 @testable import STEWUniversity
 
@@ -28,7 +29,7 @@ final class STEWUniversityTests: XCTestCase {
     }
 
     func testNavigationIncludesMobileV1DestinationsOnly() {
-        XCTAssertEqual(AppDestination.allCases.map(\.rawValue), ["Songwriting", "Jam", "Band", "Ear Training", "Visualizer", "Games"])
+        XCTAssertEqual(AppDestination.allCases.map(\.rawValue), ["Account", "Songwriting", "Jam", "Band", "Ear Training", "Visualizer", "Games"])
     }
 
     func testBandPartKindsAreIndependentFromJamInstruments() {
@@ -465,6 +466,187 @@ final class STEWUniversityTests: XCTestCase {
         XCTAssertEqual(store.weekDayKeys().count, 7)
     }
 
+    func testProgressEventEncodesStableIdentifiersAndTypedPayload() throws {
+        let clientEventID = UUID()
+        let installationID = UUID()
+        let sessionID = UUID()
+        let event = ProgressEventEnvelope(
+            clientEventID: clientEventID,
+            installationID: installationID,
+            sessionID: sessionID,
+            sequenceNumber: 3,
+            type: "ear_answered",
+            occurredAt: Date(timeIntervalSince1970: 100),
+            payload: .ear(
+                EarAnsweredProgressPayload(
+                    skillID: "interval.major3", mode: "interval", correct: true
+                )
+            )
+        )
+        let data = try BandJSONCoding.encoder().encode(event)
+        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        XCTAssertEqual(object["client_event_id"] as? String, clientEventID.uuidString)
+        XCTAssertEqual(object["installation_id"] as? String, installationID.uuidString)
+        XCTAssertEqual(object["session_id"] as? String, sessionID.uuidString)
+        XCTAssertEqual(object["sequence_number"] as? Int, 3)
+        XCTAssertEqual(object["type"] as? String, "ear_answered")
+        let payload = try XCTUnwrap(object["payload"] as? [String: Any])
+        XCTAssertEqual(payload["skill_id"] as? String, "interval.major3")
+        XCTAssertEqual(payload["mode"] as? String, "interval")
+    }
+
+    @MainActor
+    func testAccountProgressDoesNotOverwriteIndependentGuestProfile() {
+        var guest = EarTrainingProfile()
+        guest.totalXP = 40
+        let persistence = MemoryEarTrainingPersistence(profile: guest)
+        let store = EarTrainingProgressStore(
+            persistence: persistence,
+            reminderScheduler: MockReminderScheduler(),
+            calendar: fixedCalendar,
+            now: { self.makeDate(2026, 7, 20) }
+        )
+        var accountProfile = guest
+        accountProfile.totalXP = 900
+        store.activateAccountProfile(accountProfile)
+        XCTAssertEqual(store.profile.totalXP, 900)
+
+        _ = store.answer(testQuestion(), choice: "Major 3rd")
+        XCTAssertEqual(persistence.profile?.totalXP, 40)
+
+        store.restoreGuestProfile()
+        XCTAssertEqual(store.profile.totalXP, 40)
+        XCTAssertFalse(store.isAccountMode)
+    }
+
+    @MainActor
+    func testServerSnapshotReconcilesEarTrainingAndCompletedGameStatistics() {
+        let ear = EarTrainingProgressStore(
+            persistence: MemoryEarTrainingPersistence(),
+            reminderScheduler: MockReminderScheduler(),
+            calendar: fixedCalendar,
+            now: { self.makeDate(2026, 7, 20) }
+        )
+        let games = GameProgressStore(
+            persistence: MemoryGamePersistence(),
+            calendar: fixedCalendar,
+            now: { self.makeDate(2026, 7, 20) }
+        )
+        let snapshot = makeProgressSnapshot(xp: 640)
+        ear.applyAccountSnapshot(snapshot)
+        games.applyAccountSnapshot(snapshot)
+
+        XCTAssertEqual(ear.profile.totalXP, 640)
+        XCTAssertEqual(ear.profile.mastery["interval.major3"]?.attempts, 8)
+        XCTAssertEqual(ear.profile.completedGoalDays, ["2026-07-19", "2026-07-20"])
+        XCTAssertEqual(games.sudoku.solvedCount, 4)
+        XCTAssertEqual(games.bestSudokuTime(for: .medium), 88)
+        XCTAssertEqual(games.melody.gamesPlayed, 5)
+        XCTAssertEqual(games.melody.highScore, 900)
+    }
+
+    @MainActor
+    func testOfflineAccountEventRemainsInDurableOutboxAndLogoutRestoresGuest() async throws {
+        let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try ModelContainer(
+            for: PendingProgressEvent.self,
+            CachedAccountProgress.self,
+            configurations: configuration
+        )
+        let context = ModelContext(container)
+        var guest = EarTrainingProfile()
+        guest.totalXP = 25
+        let ear = EarTrainingProgressStore(
+            persistence: MemoryEarTrainingPersistence(profile: guest),
+            reminderScheduler: MockReminderScheduler(),
+            calendar: fixedCalendar,
+            now: { self.makeDate(2026, 7, 20) }
+        )
+        let games = GameProgressStore(
+            persistence: MemoryGamePersistence(),
+            calendar: fixedCalendar,
+            now: { self.makeDate(2026, 7, 20) }
+        )
+        let account = AccountSession(arguments: ["--ui-testing-band-demo"])
+        let coordinator = ProgressSyncCoordinator(
+            context: context,
+            account: account,
+            earTraining: ear,
+            games: games,
+            client: OfflineProgressAPI(snapshot: makeProgressSnapshot(xp: 100))
+        )
+        await Task.yield()
+        await coordinator.synchronize()
+        XCTAssertTrue(ear.isAccountMode)
+
+        _ = ear.answer(testQuestion(), choice: "Major 3rd")
+        try await Task.sleep(for: .milliseconds(150))
+        let pending = try context.fetch(FetchDescriptor<PendingProgressEvent>())
+        XCTAssertEqual(pending.count, 1)
+        XCTAssertGreaterThanOrEqual(pending[0].attemptCount, 1)
+
+        await account.logout()
+        await Task.yield()
+        XCTAssertEqual(ear.profile.totalXP, 25)
+        XCTAssertFalse(ear.isAccountMode)
+    }
+
+    private func makeProgressSnapshot(xp: Int) -> ProgressSnapshot {
+        ProgressSnapshot(
+            revision: 8,
+            updatedAt: Date(timeIntervalSince1970: 100),
+            importState: .complete,
+            preferences: SyncedProgressPreferences(dailyGoal: 5, timeZone: "America/New_York"),
+            account: SyncedAccountProgress(
+                xp: xp,
+                level: 3,
+                levelTitle: "Focused Listener",
+                xpIntoLevel: 40,
+                xpToNextLevel: 560
+            ),
+            earTraining: SyncedEarTrainingProgress(
+                currentStreak: 2,
+                longestStreak: 7,
+                mastery: [
+                    "interval.major3": SyncedMasteryProgress(attempts: 8, correct: 7, score: 72)
+                ],
+                achievements: ["firstCorrect", "firstGoal"],
+                completedGoalDays: ["2026-07-19", "2026-07-20"],
+                today: SyncedDailyEarProgress(
+                    day: "2026-07-20",
+                    answered: 5,
+                    correct: 4,
+                    xpEarned: 79,
+                    bestCombo: 3,
+                    goalTarget: 5,
+                    goalCompleted: true,
+                    challengeKind: "comboThree",
+                    challengeProgress: 3,
+                    challengeTarget: 3,
+                    challengeCompleted: true
+                )
+            ),
+            games: SyncedGameStatistics(
+                sudoku: SyncedSudokuStatistics(
+                    solvedCount: 4,
+                    currentDailyStreak: 2,
+                    longestDailyStreak: 3,
+                    lastDailyCompletionDay: "2026-07-20",
+                    completedDailyDays: ["2026-07-19", "2026-07-20"],
+                    bestUnassistedSeconds: ["medium": 88],
+                    completedPuzzleIDs: ["p1", "p2", "p3", "p4"]
+                ),
+                melody: SyncedMelodyStatistics(
+                    gamesPlayed: 5,
+                    highScore: 900,
+                    longestSequence: 11,
+                    totalCorrectRounds: 40,
+                    bestScores: ["hard": 900]
+                )
+            )
+        )
+    }
+
     private var fixedCalendar: Calendar {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(secondsFromGMT: 0)!
@@ -519,6 +701,21 @@ final class STEWUniversityTests: XCTestCase {
 private struct StubJamCatalogProvider: JamCatalogProviding {
     let tracks: [JamTrack]
     func fetchTracks() async throws -> [JamTrack] { tracks }
+}
+
+private struct OfflineProgressAPI: ProgressAPIProviding {
+    let snapshot: ProgressSnapshot
+
+    func fetchProgress() async throws -> ProgressSnapshot { snapshot }
+    func sendProgressEvents(_ events: [ProgressEventEnvelope]) async throws -> ProgressBatchResponse {
+        throw URLError(.notConnectedToInternet)
+    }
+    func importProgress(_ body: ProgressImportBody) async throws -> ProgressImportResponse {
+        ProgressImportResponse(applied: true, snapshot: snapshot)
+    }
+    func updateProgressPreferences(dailyGoal: Int?, timeZone: String?) async throws -> ProgressSnapshot {
+        snapshot
+    }
 }
 
 private enum TestJamCatalogError: Error {

@@ -30,10 +30,16 @@ struct UserDefaultsGamePersistence: GameProfilePersisting {
 final class GameProgressStore: ObservableObject {
     @Published private(set) var profile: GameProfile
 
+    var accountSudokuSink: ((SudokuSession) -> Void)?
+    var accountMelodySink: ((MelodyMemorySession) -> Void)?
+    var accountLocalChangeSink: (() -> Void)?
+
     private let persistence: GameProfilePersisting
     private var calendar: Calendar
     private let now: () -> Date
     private let generator: HarmonicSudokuGenerator
+    private var guestProfile: GameProfile
+    private(set) var isAccountMode = false
 
     init(
         persistence: GameProfilePersisting = UserDefaultsGamePersistence(),
@@ -45,9 +51,13 @@ final class GameProgressStore: ObservableObject {
         self.calendar = calendar
         self.now = now
         self.generator = generator
-        profile = persistence.load() ?? GameProfile()
+        let loaded = persistence.load() ?? GameProfile()
+        profile = loaded
+        guestProfile = loaded
         reconcile()
     }
+
+    var guestProfileSnapshot: GameProfile { guestProfile }
 
     var sudoku: HarmonicSudokuStats { profile.sudoku }
     var melody: MelodyMemoryStats { profile.melody }
@@ -134,6 +144,7 @@ final class GameProgressStore: ObservableObject {
         }
         session.completionRecorded = true
         saveSudoku(session)
+        if isAccountMode { accountSudokuSink?(session) }
         return session
     }
 
@@ -145,6 +156,7 @@ final class GameProgressStore: ObservableObject {
         let key = session.difficulty.rawValue
         profile.melody.bestScores[key] = max(profile.melody.bestScores[key] ?? 0, session.score)
         save()
+        if isAccountMode { accountMelodySink?(session) }
     }
 
     func bestSudokuTime(for difficulty: SudokuDifficulty) -> Int? {
@@ -165,7 +177,61 @@ final class GameProgressStore: ObservableObject {
         return dayKey(for: yesterday) == key
     }
 
-    private func save() { persistence.save(profile) }
+    func activateAccountProfile(_ accountProfile: GameProfile) {
+        isAccountMode = true
+        profile = accountProfile
+        reconcile()
+    }
+
+    func applyAccountSnapshot(_ snapshot: ProgressSnapshot) {
+        let activeDaily = isAccountMode ? profile.activeDailySudoku : nil
+        let activePractice = isAccountMode ? profile.activePracticeSudoku : nil
+        let sudoku = snapshot.games.sudoku
+        let melody = snapshot.games.melody
+        var value = GameProfile()
+        value.sudoku = HarmonicSudokuStats(
+            solvedCount: sudoku.solvedCount,
+            currentDailyStreak: sudoku.currentDailyStreak,
+            longestDailyStreak: sudoku.longestDailyStreak,
+            lastDailyCompletionDay: sudoku.lastDailyCompletionDay,
+            completedDailyDays: sudoku.completedDailyDays,
+            bestUnassistedSeconds: Dictionary(
+                uniqueKeysWithValues: sudoku.bestUnassistedSeconds.map {
+                    ($0.key.capitalized, $0.value)
+                }
+            ),
+            completedPuzzleIDs: Set(sudoku.completedPuzzleIDs)
+        )
+        value.melody = MelodyMemoryStats(
+            gamesPlayed: melody.gamesPlayed,
+            highScore: melody.highScore,
+            longestSequence: melody.longestSequence,
+            totalCorrectRounds: melody.totalCorrectRounds,
+            bestScores: Dictionary(
+                uniqueKeysWithValues: melody.bestScores.map { ($0.key.capitalized, $0.value) }
+            )
+        )
+        value.activeDailySudoku = activeDaily
+        value.activePracticeSudoku = activePractice
+        isAccountMode = true
+        profile = value
+        accountLocalChangeSink?()
+    }
+
+    func restoreGuestProfile() {
+        isAccountMode = false
+        profile = guestProfile
+        reconcile()
+    }
+
+    private func save() {
+        if isAccountMode {
+            accountLocalChangeSink?()
+        } else {
+            guestProfile = profile
+            persistence.save(profile)
+        }
+    }
 }
 
 enum GameFormatting {

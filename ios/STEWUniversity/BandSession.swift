@@ -4,7 +4,7 @@ import Foundation
 import Security
 import UIKit
 
-enum BandAuthState: Equatable {
+enum AccountAuthState: Equatable {
     case restoring
     case signedOut
     case needsProfile(BandUser?)
@@ -13,8 +13,8 @@ enum BandAuthState: Equatable {
 }
 
 @MainActor
-final class BandAuthSession: ObservableObject {
-    @Published private(set) var state: BandAuthState
+final class AccountSession: ObservableObject {
+    @Published private(set) var state: AccountAuthState
     @Published private(set) var isWorking = false
 
     let client: BandAPIClient
@@ -198,6 +198,9 @@ final class BandAuthSession: ObservableObject {
         supportURL: URL(string: "https://example.com/support")!
     )
 }
+
+typealias BandAuthState = AccountAuthState
+typealias BandAuthSession = AccountSession
 
 private struct AppleAuthorizationResult {
     let identityToken: String

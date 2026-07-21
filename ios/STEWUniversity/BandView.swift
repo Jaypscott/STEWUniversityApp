@@ -80,7 +80,7 @@ struct BandView: View {
     }
 }
 
-private struct BandAccountRequiredView: View {
+struct BandAccountRequiredView: View {
     @EnvironmentObject private var auth: BandAuthSession
 
     var body: some View {
@@ -112,7 +112,7 @@ private struct BandAccountRequiredView: View {
                     ProgressView("Signing in…")
                         .accessibilityIdentifier("band-sign-in-progress")
                 }
-                Text("Sign-in is only required for Band. Every other STEW feature remains available without an account.")
+                Text("A STEW Account syncs completed learning and game progress across your devices and unlocks Band. You can still play locally as a guest.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
@@ -124,7 +124,7 @@ private struct BandAccountRequiredView: View {
     }
 }
 
-private struct BandProfileSetupView: View {
+struct BandProfileSetupView: View {
     @EnvironmentObject private var auth: BandAuthSession
     let user: BandUser?
     @State private var username = ""

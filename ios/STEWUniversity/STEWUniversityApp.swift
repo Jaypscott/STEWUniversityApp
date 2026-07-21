@@ -1,4 +1,5 @@
 import SwiftUI
+import SwiftData
 
 @MainActor
 @main
@@ -10,6 +11,8 @@ struct STEWUniversityApp: App {
     @StateObject private var bandStore: BandStore
     @StateObject private var bandNotifications: BandNotificationStore
     @StateObject private var mediaUploads: MediaUploadManager
+    @StateObject private var progressSync: ProgressSyncCoordinator
+    private let progressContainer: ModelContainer
 
     init() {
         if ProcessInfo.processInfo.arguments.contains("--ui-testing-reset-ear-training") {
@@ -18,12 +21,31 @@ struct STEWUniversityApp: App {
         if ProcessInfo.processInfo.arguments.contains("--ui-testing-reset-games") {
             UserDefaults.standard.removeObject(forKey: "stew.games.profile.v1")
         }
-        _earTrainingProgress = StateObject(wrappedValue: EarTrainingProgressStore())
-        _gameProgress = StateObject(wrappedValue: GameProgressStore())
-        _bandAuth = StateObject(wrappedValue: BandAuthSession())
+        let earTrainingProgress = EarTrainingProgressStore()
+        let gameProgress = GameProgressStore()
+        let bandAuth = AccountSession()
+        let schema = Schema([PendingProgressEvent.self, CachedAccountProgress.self])
+        let container: ModelContainer
+        do {
+            container = try ModelContainer(for: schema)
+        } catch {
+            fatalError("Could not open the progress sync store: \(error.localizedDescription)")
+        }
+        progressContainer = container
+        _earTrainingProgress = StateObject(wrappedValue: earTrainingProgress)
+        _gameProgress = StateObject(wrappedValue: gameProgress)
+        _bandAuth = StateObject(wrappedValue: bandAuth)
         _bandStore = StateObject(wrappedValue: BandStore())
         _bandNotifications = StateObject(wrappedValue: BandNotificationStore())
         _mediaUploads = StateObject(wrappedValue: MediaUploadManager())
+        _progressSync = StateObject(
+            wrappedValue: ProgressSyncCoordinator(
+                context: ModelContext(container),
+                account: bandAuth,
+                earTraining: earTrainingProgress,
+                games: gameProgress
+            )
+        )
     }
 
     var body: some Scene {
@@ -36,6 +58,8 @@ struct STEWUniversityApp: App {
                 .environmentObject(bandStore)
                 .environmentObject(bandNotifications)
                 .environmentObject(mediaUploads)
+                .environmentObject(progressSync)
+                .modelContainer(progressContainer)
         }
     }
 }

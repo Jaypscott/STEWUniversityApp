@@ -3,6 +3,15 @@ import UserNotifications
 
 extension Notification.Name {
     static let bandNotificationRoute = Notification.Name("BandNotificationRoute")
+    static let progressInvalidated = Notification.Name("ProgressInvalidated")
+}
+
+@MainActor
+final class ProgressPushRefreshHandler {
+    static let shared = ProgressPushRefreshHandler()
+    var refresh: (() async -> Void)?
+
+    func handle() async { await refresh?() }
 }
 
 @MainActor
@@ -17,21 +26,39 @@ final class BandPushManager: NSObject, ObservableObject {
 
     func requestAuthorization() async {
         do {
-            let allowed = try await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .badge, .sound])
-            if allowed { UIApplication.shared.registerForRemoteNotifications() }
+            _ = try await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .badge, .sound])
+            UIApplication.shared.registerForRemoteNotifications()
             await refreshStatus()
         } catch { await refreshStatus() }
     }
 
+    func registerForBackgroundUpdates() async {
+        UIApplication.shared.registerForRemoteNotifications()
+        await refreshStatus()
+    }
+
     func registerCachedTokenIfAvailable() async {
         guard let token = UserDefaults.standard.string(forKey: tokenKey) else { return }
-        try? await BandAPIClient.shared.registerDevice(token: token, environment: environment)
+        try? await BandAPIClient.shared.registerDevice(
+            token: token,
+            installationID: AppInstallation.identifier,
+            environment: environment,
+            enabled: alertsEnabled
+        )
     }
 
     func receivedDeviceToken(_ data: Data) {
         let token = data.map { String(format: "%02x", $0) }.joined()
         UserDefaults.standard.set(token, forKey: tokenKey)
-        Task { try? await BandAPIClient.shared.registerDevice(token: token, environment: environment) }
+        Task {
+            await refreshStatus()
+            try? await BandAPIClient.shared.registerDevice(
+                token: token,
+                installationID: AppInstallation.identifier,
+                environment: environment,
+                enabled: alertsEnabled
+            )
+        }
     }
 
     private var environment: String {
@@ -40,6 +67,10 @@ final class BandPushManager: NSObject, ObservableObject {
         #else
         "production"
         #endif
+    }
+
+    private var alertsEnabled: Bool {
+        [.authorized, .provisional, .ephemeral].contains(authorizationStatus)
     }
 }
 
@@ -54,6 +85,22 @@ final class STEWAppDelegate: NSObject, UIApplicationDelegate, UNUserNotification
 
     func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
         Task { @MainActor in BandPushManager.shared.receivedDeviceToken(deviceToken) }
+    }
+
+    func application(
+        _ application: UIApplication,
+        didReceiveRemoteNotification userInfo: [AnyHashable: Any],
+        fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void
+    ) {
+        guard userInfo["kind"] as? String == "progress_updated" else {
+            completionHandler(.noData)
+            return
+        }
+        NotificationCenter.default.post(name: .progressInvalidated, object: nil)
+        Task { @MainActor in
+            await ProgressPushRefreshHandler.shared.handle()
+            completionHandler(.newData)
+        }
     }
 
     nonisolated func userNotificationCenter(
