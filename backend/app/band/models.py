@@ -90,6 +90,7 @@ class ReactionKind(StringEnum):
 class BandCardKind(StringEnum):
     note = "note"
     image = "image"
+    audio = "audio"
     link = "link"
     project = "project"
 

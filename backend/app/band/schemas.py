@@ -254,6 +254,12 @@ class PostUpdate(BaseModel):
     is_pinned: bool | None = None
 
 
+class PostReactionSummary(BaseModel):
+    kind: ReactionKind
+    count: int = Field(ge=1)
+    reacted_by_current_user: bool
+
+
 class PostResponse(ORMModel):
     id: UUID
     band_id: UUID
@@ -271,6 +277,7 @@ class PostResponse(ORMModel):
     edited_at: datetime | None
     deleted_at: datetime | None
     attachments: list[AssetResponse] = Field(default_factory=list)
+    reactions: list[PostReactionSummary] = Field(default_factory=list)
 
 
 class CommentCreate(BaseModel):
