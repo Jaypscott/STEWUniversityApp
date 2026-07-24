@@ -431,7 +431,9 @@ async def list_posts(
         UserBlock.blocker_user_id == user.id
     )
     query = select(Post).where(
-        Post.band_id == band_id, Post.author_user_id.not_in(blocked_ids)
+        Post.band_id == band_id,
+        Post.deleted_at.is_(None),
+        Post.author_user_id.not_in(blocked_ids),
     )
     if project_id is not None:
         await require_project(session, project_id, band_id)
@@ -511,6 +513,51 @@ async def validate_board_card(
     return BandCardSize.wide, referenced_project
 
 
+async def existing_post_for_assets(
+    session: AsyncSession,
+    *,
+    band_id: uuid.UUID,
+    author_user_id: uuid.UUID,
+    project_id: uuid.UUID | None,
+    card_kind: BandCardKind,
+    asset_ids: list[uuid.UUID],
+) -> Post | None:
+    if not asset_ids:
+        return None
+    candidate_ids = list(
+        (
+            await session.scalars(
+                select(PostAttachment.post_id).where(
+                    PostAttachment.asset_id == asset_ids[0]
+                )
+            )
+        ).all()
+    )
+    for post_id in candidate_ids:
+        post = await session.get(Post, post_id)
+        if (
+            post is None
+            or post.band_id != band_id
+            or post.author_user_id != author_user_id
+            or post.project_id != project_id
+            or post.card_kind != card_kind
+            or post.deleted_at is not None
+        ):
+            continue
+        attached_ids = list(
+            (
+                await session.scalars(
+                    select(PostAttachment.asset_id)
+                    .where(PostAttachment.post_id == post.id)
+                    .order_by(PostAttachment.display_order)
+                )
+            ).all()
+        )
+        if attached_ids == asset_ids:
+            return post
+    return None
+
+
 @router.post("/bands/{band_id}/posts", response_model=PostResponse, status_code=201)
 async def create_post(
     band_id: uuid.UUID,
@@ -579,6 +626,16 @@ async def create_post(
         if not text and external_url is None and not assets:
             raise BandAPIError("empty_post", "Add text, a link, or media.")
         card_size = BandCardSize.compact
+    existing_post = await existing_post_for_assets(
+        session,
+        band_id=band_id,
+        author_user_id=user.id,
+        project_id=body.project_id,
+        card_kind=body.card_kind,
+        asset_ids=[asset.id for asset in assets],
+    )
+    if existing_post is not None:
+        return await build_post_response(session, existing_post, user.id)
     post = Post(
         band_id=band_id,
         project_id=body.project_id,

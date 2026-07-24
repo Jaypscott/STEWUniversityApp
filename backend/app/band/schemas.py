@@ -2,7 +2,14 @@ from datetime import datetime
 from uuid import UUID
 from typing import Generic, TypeVar
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    AliasChoices,
+    BaseModel,
+    ConfigDict,
+    Field,
+    field_validator,
+    model_validator,
+)
 
 from app.band.models import (
     AssetKind,
@@ -16,6 +23,7 @@ from app.band.models import (
     ReactionKind,
     ReportReason,
     ReportStatus,
+    SongwritingMessageRole,
 )
 
 
@@ -243,8 +251,16 @@ class PostCreate(BaseModel):
     card_kind: BandCardKind = BandCardKind.note
     body: str = Field(default="", max_length=2000)
     external_url: str | None = Field(default=None, max_length=2048)
-    asset_ids: list[UUID] = Field(default_factory=list, max_length=4)
-    mentioned_user_ids: list[UUID] = Field(default_factory=list, max_length=20)
+    asset_ids: list[UUID] = Field(
+        default_factory=list,
+        max_length=4,
+        validation_alias=AliasChoices("asset_ids", "asset_i_ds"),
+    )
+    mentioned_user_ids: list[UUID] = Field(
+        default_factory=list,
+        max_length=20,
+        validation_alias=AliasChoices("mentioned_user_ids", "mentioned_user_i_ds"),
+    )
 
 
 class PostUpdate(BaseModel):
@@ -283,7 +299,11 @@ class PostResponse(ORMModel):
 class CommentCreate(BaseModel):
     body: str = Field(min_length=1, max_length=1000)
     parent_comment_id: UUID | None = None
-    mentioned_user_ids: list[UUID] = Field(default_factory=list, max_length=20)
+    mentioned_user_ids: list[UUID] = Field(
+        default_factory=list,
+        max_length=20,
+        validation_alias=AliasChoices("mentioned_user_ids", "mentioned_user_i_ds"),
+    )
 
 
 class CommentResponse(ORMModel):
@@ -375,3 +395,50 @@ class AccountDeleteRequest(BaseModel):
     identity_token: str = Field(min_length=20)
     authorization_code: str = Field(min_length=3)
     nonce: str = Field(min_length=16, max_length=200)
+
+
+class SongwritingLaunchRequest(BaseModel):
+    launch_id: UUID
+
+
+class SongwritingMessageCreate(BaseModel):
+    role: SongwritingMessageRole
+    content: str = Field(min_length=1, max_length=6000)
+
+
+class SongwritingConversationCreate(BaseModel):
+    id: UUID
+    message_id: UUID
+    content: str = Field(min_length=1, max_length=1200)
+
+
+class SongwritingMessageResponse(ORMModel):
+    id: UUID
+    role: SongwritingMessageRole
+    content: str
+    sequence: int
+    created_at: datetime
+
+
+class SongwritingConversationSummary(ORMModel):
+    id: UUID
+    title: str
+    preview: str
+    message_count: int
+    created_at: datetime
+    updated_at: datetime
+
+
+class SongwritingConversationResponse(ORMModel):
+    id: UUID
+    title: str
+    return_count: int
+    archived_at: datetime | None
+    created_at: datetime
+    updated_at: datetime
+    messages: list[SongwritingMessageResponse]
+
+
+class SongwritingLaunchResponse(BaseModel):
+    active: SongwritingConversationResponse | None
+    archived_conversation_id: UUID | None = None

@@ -17,6 +17,7 @@ from app.band.models import (
     DeviceRegistration,
     Notification,
     Post,
+    SongwritingConversation,
     TrackTake,
     User,
     UserBlock,
@@ -71,6 +72,11 @@ async def _delete_account(user_id: uuid.UUID) -> None:
             await session.delete(asset)
         await session.execute(delete(Comment).where(Comment.author_user_id == user_id))
         await session.execute(delete(Post).where(Post.author_user_id == user_id))
+        await session.execute(
+            delete(SongwritingConversation).where(
+                SongwritingConversation.user_id == user_id
+            )
+        )
         await session.execute(delete(TrackTake).where(TrackTake.created_by_user_id == user_id))
         await session.execute(
             delete(Notification).where(
