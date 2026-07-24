@@ -7,6 +7,7 @@ from app.band.media_api import router as media_router
 from app.band.notifications_api import router as notifications_router
 from app.band.public_api import router as public_router
 from app.band.safety_api import router as safety_router
+from app.band.songwriting_api import router as songwriting_router
 
 
 router = APIRouter()
@@ -16,4 +17,5 @@ router.include_router(collaboration_router)
 router.include_router(media_router)
 router.include_router(notifications_router)
 router.include_router(safety_router)
+router.include_router(songwriting_router)
 router.include_router(public_router)

@@ -90,6 +90,7 @@ class ReactionKind(StringEnum):
 class BandCardKind(StringEnum):
     note = "note"
     image = "image"
+    audio = "audio"
     link = "link"
     project = "project"
 
@@ -126,6 +127,11 @@ class ReportStatus(StringEnum):
     dismissed = "dismissed"
 
 
+class SongwritingMessageRole(StringEnum):
+    user = "user"
+    assistant = "assistant"
+
+
 class User(Base):
     __tablename__ = "users"
 
@@ -142,6 +148,54 @@ class User(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, onupdate=utcnow
     )
+
+
+class SongwritingConversation(Base):
+    __tablename__ = "songwriting_conversations"
+    __table_args__ = (
+        Index(
+            "ix_songwriting_conversations_user_archive_updated",
+            "user_id",
+            "archived_at",
+            "updated_at",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    title: Mapped[str] = mapped_column(String(80), default="")
+    return_count: Mapped[int] = mapped_column(Integer, default=0)
+    last_launch_id: Mapped[uuid.UUID | None] = mapped_column(Uuid)
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow
+    )
+
+
+class SongwritingMessage(Base):
+    __tablename__ = "songwriting_messages"
+    __table_args__ = (
+        UniqueConstraint("conversation_id", "sequence"),
+        Index(
+            "ix_songwriting_messages_conversation_sequence",
+            "conversation_id",
+            "sequence",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True)
+    conversation_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("songwriting_conversations.id", ondelete="CASCADE"), index=True
+    )
+    role: Mapped[SongwritingMessageRole] = mapped_column(
+        Enum(SongwritingMessageRole, native_enum=False)
+    )
+    content: Mapped[str] = mapped_column(Text)
+    sequence: Mapped[int] = mapped_column(Integer)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
 class AppleIdentity(Base):

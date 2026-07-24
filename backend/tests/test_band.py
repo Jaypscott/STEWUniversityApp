@@ -16,10 +16,11 @@ from app.band.bands_api import (
     transfer_ownership,
     update_band,
 )
-from app.band.collaboration_api import create_post, list_posts, update_post
+from app.band.collaboration_api import create_post, delete_post, list_posts, update_post
 from app.band.database import Base, SessionFactory, engine
 from app.band.errors import BandAPIError
-from app.band.media_api import validate_upload
+from app.band.jobs import _validate_asset
+from app.band.media_api import complete_upload, validate_upload
 from app.band.models import (
     AppleIdentity,
     Asset,
@@ -34,6 +35,10 @@ from app.band.models import (
     Comment,
     Post,
     Project,
+    Reaction,
+    ReactionKind,
+    SongwritingConversation,
+    SongwritingMessageRole,
     User,
     utcnow,
 )
@@ -41,10 +46,23 @@ from app.band.schemas import (
     AppleAuthRequest,
     BandCreate,
     BandUpdate,
+    CommentCreate,
     OwnershipTransfer,
     PostCreate,
     PostUpdate,
+    SongwritingConversationCreate,
+    SongwritingLaunchRequest,
+    SongwritingMessageCreate,
     UploadRequest,
+)
+from app.band.songwriting_api import (
+    append_message,
+    clear_conversations,
+    create_conversation,
+    delete_conversation,
+    list_conversations,
+    register_launch,
+    resume_conversation,
 )
 from app.band.security import (
     AppleClaims,
@@ -53,6 +71,7 @@ from app.band.security import (
     rotate_refresh_token,
 )
 from app.band.service import membership_for
+from app.band.storage import StoredObject
 from app.main import app
 
 
@@ -280,17 +299,27 @@ def test_refresh_rotation_revokes_family_when_an_old_token_is_reused():
 
 def test_media_limits_and_project_only_rule():
     band_id = uuid.uuid4()
-    with pytest.raises(BandAPIError) as general_audio:
+    validate_upload(
+        UploadRequest(
+            band_id=band_id,
+            kind=AssetKind.audio,
+            filename="idea.m4a",
+            content_type="audio/mp4",
+            byte_size=1024,
+        )
+    )
+
+    with pytest.raises(BandAPIError) as general_video:
         validate_upload(
             UploadRequest(
                 band_id=band_id,
-                kind=AssetKind.audio,
-                filename="take.m4a",
-                content_type="audio/mp4",
+                kind=AssetKind.video,
+                filename="take.mp4",
+                content_type="video/mp4",
                 byte_size=1024,
             )
         )
-    assert general_audio.value.code == "project_media_required"
+    assert general_video.value.code == "project_media_required"
 
     with pytest.raises(BandAPIError) as image_limit:
         validate_upload(
@@ -303,6 +332,139 @@ def test_media_limits_and_project_only_rule():
             )
         )
     assert image_limit.value.code == "file_too_large"
+
+
+def test_post_and_comment_accept_shipped_plural_id_aliases():
+    asset_id = uuid.uuid4()
+    mentioned_user_id = uuid.uuid4()
+    post = PostCreate.model_validate(
+        {
+            "card_kind": "image",
+            "asset_i_ds": [str(asset_id)],
+            "mentioned_user_i_ds": [str(mentioned_user_id)],
+        }
+    )
+    comment = CommentCreate.model_validate(
+        {
+            "body": "Take another look",
+            "mentioned_user_i_ds": [str(mentioned_user_id)],
+        }
+    )
+
+    assert post.asset_ids == [asset_id]
+    assert post.mentioned_user_ids == [mentioned_user_id]
+    assert comment.mentioned_user_ids == [mentioned_user_id]
+    assert "asset_ids" in post.model_dump()
+    assert "asset_i_ds" not in post.model_dump()
+
+
+def test_image_upload_completion_queues_and_validates(monkeypatch):
+    queued: list[str] = []
+
+    async def stored_object(_key: str) -> StoredObject:
+        return StoredObject(byte_size=1024, content_type="image/jpeg", checksum="etag")
+
+    async def probe_image(_asset: Asset) -> tuple[None, str]:
+        return None, "jpeg"
+
+    monkeypatch.setattr("app.band.media_api.storage.head", stored_object)
+    monkeypatch.setattr("app.band.jobs.storage.head", stored_object)
+    monkeypatch.setattr("app.band.jobs._probe_media", probe_image)
+    monkeypatch.setattr(
+        "app.band.media_api.band_queue.enqueue",
+        lambda _queue, _function, asset_id: queued.append(asset_id) or True,
+    )
+
+    async def scenario():
+        asset_id: uuid.UUID
+        async with SessionFactory() as session:
+            owner = profile_user("image-owner")
+            session.add(owner)
+            await session.flush()
+            band = Band(name="Images", owner_user_id=owner.id, reserved_bytes=1024)
+            session.add(band)
+            await session.flush()
+            session.add(
+                BandMembership(
+                    band_id=band.id, user_id=owner.id, role=BandRole.owner
+                )
+            )
+            asset = Asset(
+                band_id=band.id,
+                uploaded_by_user_id=owner.id,
+                kind=AssetKind.image,
+                status=AssetStatus.uploading,
+                storage_key=f"bands/{band.id}/assets/{uuid.uuid4()}/original",
+                original_filename="board.jpg",
+                content_type="image/jpeg",
+                declared_byte_size=1024,
+                upload_expires_at=utcnow() + timedelta(hours=1),
+            )
+            session.add(asset)
+            await session.commit()
+            asset_id = asset.id
+
+            completing = await complete_upload(asset.id, owner, session)
+            assert completing.status == AssetStatus.processing
+            assert queued == [str(asset.id)]
+
+        await _validate_asset(asset_id)
+
+        async with SessionFactory() as session:
+            ready = await session.get(Asset, asset_id)
+            assert ready is not None
+            assert ready.status == AssetStatus.ready
+            assert ready.byte_size == 1024
+            band = await session.get(Band, ready.band_id)
+            assert band is not None
+            assert band.reserved_bytes == 0
+            assert band.used_bytes == 1024
+
+    run(scenario())
+
+
+def test_processing_upload_reports_queue_failure_and_can_retry(monkeypatch):
+    async def scenario():
+        async with SessionFactory() as session:
+            owner = profile_user("retry-owner")
+            session.add(owner)
+            await session.flush()
+            band = Band(name="Retry", owner_user_id=owner.id)
+            session.add(band)
+            await session.flush()
+            session.add(
+                BandMembership(
+                    band_id=band.id, user_id=owner.id, role=BandRole.owner
+                )
+            )
+            asset = Asset(
+                band_id=band.id,
+                uploaded_by_user_id=owner.id,
+                kind=AssetKind.image,
+                status=AssetStatus.processing,
+                storage_key=f"bands/{band.id}/assets/{uuid.uuid4()}/original",
+                original_filename="retry.jpg",
+                content_type="image/jpeg",
+                declared_byte_size=100,
+                upload_expires_at=utcnow() + timedelta(hours=1),
+            )
+            session.add(asset)
+            await session.commit()
+
+            monkeypatch.setattr(
+                "app.band.media_api.band_queue.enqueue", lambda *_args: False
+            )
+            with pytest.raises(BandAPIError) as unavailable:
+                await complete_upload(asset.id, owner, session)
+            assert unavailable.value.code == "media_queue_unavailable"
+
+            monkeypatch.setattr(
+                "app.band.media_api.band_queue.enqueue", lambda *_args: True
+            )
+            retrying = await complete_upload(asset.id, owner, session)
+            assert retrying.status == AssetStatus.processing
+
+    run(scenario())
 
 
 def test_band_appearance_validates_assets_color_and_feature(monkeypatch):
@@ -429,7 +591,19 @@ def test_mood_board_card_rules_sizing_pins_and_project_filtering():
                 )
                 for index in range(2)
             ]
-            session.add_all([project, *images])
+            audio = Asset(
+                band_id=band.id,
+                uploaded_by_user_id=owner.id,
+                kind=AssetKind.audio,
+                status=AssetStatus.ready,
+                storage_key=f"bands/{band.id}/assets/{uuid.uuid4()}/original",
+                original_filename="voice-note.mp3",
+                content_type="audio/mpeg",
+                declared_byte_size=100,
+                byte_size=100,
+                upload_expires_at=utcnow() + timedelta(hours=1),
+            )
+            session.add_all([project, audio, *images])
             await session.commit()
 
             note = await create_post(
@@ -444,6 +618,27 @@ def test_mood_board_card_rules_sizing_pins_and_project_filtering():
                     card_kind=BandCardKind.image,
                     body="Visual direction",
                     asset_ids=[item.id for item in images],
+                ),
+                owner,
+                session,
+            )
+            image_retry = await create_post(
+                band.id,
+                PostCreate(
+                    card_kind=BandCardKind.image,
+                    body="Visual direction",
+                    asset_ids=[item.id for item in images],
+                ),
+                owner,
+                session,
+            )
+            assert image_retry.id == image.id
+            audio_card = await create_post(
+                band.id,
+                PostCreate(
+                    card_kind=BandCardKind.audio,
+                    body="Melody idea",
+                    asset_ids=[audio.id],
                 ),
                 owner,
                 session,
@@ -474,6 +669,7 @@ def test_mood_board_card_rules_sizing_pins_and_project_filtering():
             )
             assert note.card_size == BandCardSize.compact
             assert image.card_size == BandCardSize.wide
+            assert audio_card.card_size == BandCardSize.wide
             assert link.card_size == BandCardSize.compact
             assert project_card.card_size == BandCardSize.wide
 
@@ -491,6 +687,13 @@ def test_mood_board_card_rules_sizing_pins_and_project_filtering():
                 owner,
                 session,
             )
+            session.add_all(
+                [
+                    Reaction(user_id=owner.id, post_id=note.id, kind=ReactionKind.heart),
+                    Reaction(user_id=member.id, post_id=note.id, kind=ReactionKind.fire),
+                ]
+            )
+            await session.commit()
             page = await list_posts(
                 band.id,
                 project_id=None,
@@ -500,7 +703,13 @@ def test_mood_board_card_rules_sizing_pins_and_project_filtering():
                 session=session,
             )
             assert [item.id for item in page.items[:2]] == [link.id, note.id]
-            assert len(page.items) == 4
+            assert len(page.items) == 5
+            note_response = next(item for item in page.items if item.id == note.id)
+            reactions = {item.kind: item for item in note_response.reactions}
+            assert reactions[ReactionKind.heart].count == 1
+            assert reactions[ReactionKind.heart].reacted_by_current_user
+            assert reactions[ReactionKind.fire].count == 1
+            assert not reactions[ReactionKind.fire].reacted_by_current_user
 
             with pytest.raises(BandAPIError) as denied:
                 await update_post(
@@ -524,10 +733,234 @@ def test_mood_board_card_rules_sizing_pins_and_project_filtering():
     run(scenario())
 
 
+def test_removed_posts_stay_hidden_from_board_projects_and_pagination():
+    async def scenario():
+        async with SessionFactory() as session:
+            owner = profile_user("owner")
+            member = profile_user("member")
+            session.add_all([owner, member])
+            await session.commit()
+            response = await create_band(
+                BandCreate(name="Hidden posts", description=""), owner, session
+            )
+            band = await session.get(Band, response.id)
+            session.add(
+                BandMembership(
+                    band_id=band.id, user_id=member.id, role=BandRole.member
+                )
+            )
+            project = Project(
+                band_id=band.id, title="Private history", created_by_user_id=owner.id
+            )
+            session.add(project)
+            await session.commit()
+
+            removed_board_post = await create_post(
+                band.id,
+                PostCreate(card_kind=BandCardKind.note, body="Remove from board"),
+                owner,
+                session,
+            )
+            removed_project_post = await create_post(
+                band.id,
+                PostCreate(project_id=project.id, body="Remove from project"),
+                owner,
+                session,
+            )
+            await delete_post(band.id, removed_board_post.id, owner, session)
+            await delete_post(band.id, removed_project_post.id, owner, session)
+
+            persisted = await session.get(Post, removed_board_post.id)
+            assert persisted is not None
+            assert persisted.deleted_at is not None
+
+            moderation_removed = Post(
+                band_id=band.id,
+                author_user_id=owner.id,
+                body="Removed by moderation",
+                deleted_at=utcnow(),
+            )
+            visible_posts = [
+                Post(
+                    band_id=band.id,
+                    author_user_id=owner.id,
+                    body=f"Visible {index}",
+                )
+                for index in range(26)
+            ]
+            session.add_all([moderation_removed, *visible_posts])
+            await session.commit()
+
+            first_page = await list_posts(
+                band.id,
+                project_id=None,
+                surface="board",
+                cursor=None,
+                user=owner,
+                session=session,
+            )
+            assert len(first_page.items) == 25
+            assert first_page.next_cursor is not None
+            second_page = await list_posts(
+                band.id,
+                project_id=None,
+                surface="board",
+                cursor=first_page.next_cursor,
+                user=owner,
+                session=session,
+            )
+            returned_ids = {
+                post.id for post in [*first_page.items, *second_page.items]
+            }
+            assert len(second_page.items) == 1
+            assert returned_ids == {post.id for post in visible_posts}
+            assert removed_board_post.id not in returned_ids
+            assert moderation_removed.id not in returned_ids
+
+            project_page = await list_posts(
+                band.id,
+                project_id=project.id,
+                surface=None,
+                cursor=None,
+                user=owner,
+                session=session,
+            )
+            assert project_page.items == []
+
+            with pytest.raises(BandAPIError) as denied:
+                await delete_post(band.id, visible_posts[0].id, member, session)
+            assert denied.value.code == "permission_denied"
+
+    run(scenario())
+
+
+def test_songwriting_history_launches_resume_deletion_and_limits():
+    async def scenario():
+        async with SessionFactory() as session:
+            owner = profile_user("writer")
+            stranger = profile_user("stranger")
+            session.add_all([owner, stranger])
+            await session.commit()
+
+            conversation_id = uuid.uuid4()
+            first_message_id = uuid.uuid4()
+            created = await create_conversation(
+                SongwritingConversationCreate(
+                    id=conversation_id,
+                    message_id=first_message_id,
+                    content="  Build   a hopeful chorus  ",
+                ),
+                owner,
+                session,
+            )
+            assert created.title == "Build a hopeful chorus"
+            assert len(created.messages) == 1
+
+            first_launch_id = uuid.uuid4()
+            first = await register_launch(
+                SongwritingLaunchRequest(launch_id=first_launch_id),
+                owner,
+                session,
+            )
+            assert first.active is not None
+            assert first.active.return_count == 1
+            duplicate = await register_launch(
+                SongwritingLaunchRequest(launch_id=first_launch_id),
+                owner,
+                session,
+            )
+            assert duplicate.active is not None
+            assert duplicate.active.return_count == 1
+            second = await register_launch(
+                SongwritingLaunchRequest(launch_id=uuid.uuid4()),
+                owner,
+                session,
+            )
+            assert second.active is not None
+            assert second.active.return_count == 2
+            third = await register_launch(
+                SongwritingLaunchRequest(launch_id=uuid.uuid4()),
+                owner,
+                session,
+            )
+            assert third.active is None
+            assert third.archived_conversation_id == conversation_id
+
+            archived = await list_conversations(owner, session)
+            assert [item.id for item in archived.items] == [conversation_id]
+
+            current_id = uuid.uuid4()
+            current = await create_conversation(
+                SongwritingConversationCreate(
+                    id=current_id,
+                    message_id=uuid.uuid4(),
+                    content="A new bridge",
+                ),
+                owner,
+                session,
+            )
+            for index in range(45):
+                current = await append_message(
+                    current_id,
+                    uuid.uuid4(),
+                    SongwritingMessageCreate(
+                        role=SongwritingMessageRole.assistant,
+                        content=f"Response {index}",
+                    ),
+                    owner,
+                    session,
+                )
+            assert len(current.messages) == 40
+            assert current.messages[-1].content == "Response 44"
+
+            resumed = await resume_conversation(conversation_id, owner, session)
+            assert resumed.id == conversation_id
+            assert resumed.return_count == 0
+            current_row = await session.get(SongwritingConversation, current_id)
+            assert current_row is not None and current_row.archived_at is not None
+
+            with pytest.raises(BandAPIError) as hidden:
+                await resume_conversation(conversation_id, stranger, session)
+            assert hidden.value.code == "songwriting_conversation_not_found"
+
+            await delete_conversation(current_id, owner, session)
+            assert await session.get(SongwritingConversation, current_id) is None
+
+            for index in range(51):
+                session.add(
+                    SongwritingConversation(
+                        user_id=owner.id,
+                        title=f"Archive {index}",
+                        archived_at=utcnow(),
+                    )
+                )
+            await session.commit()
+            final_active_id = uuid.uuid4()
+            await create_conversation(
+                SongwritingConversationCreate(
+                    id=final_active_id,
+                    message_id=uuid.uuid4(),
+                    content="Keep this active",
+                ),
+                owner,
+                session,
+            )
+            limited = await list_conversations(owner, session)
+            assert len(limited.items) == 50
+
+            await clear_conversations(owner, session)
+            assert (await list_conversations(owner, session)).items == []
+            active = await session.get(SongwritingConversation, final_active_id)
+            assert active is not None and active.archived_at is None
+
+    run(scenario())
+
+
 def test_account_deletion_removes_personal_content_and_keeps_anonymous_tombstone():
     async def scenario():
         deleting_id: uuid.UUID
         band_id: uuid.UUID
+        conversation_id: uuid.UUID
         async with SessionFactory() as session:
             owner = profile_user("owner")
             deleting = profile_user("leaving")
@@ -558,8 +991,12 @@ def test_account_deletion_removes_personal_content_and_keeps_anonymous_tombstone
                 upload_expires_at=utcnow() + timedelta(hours=1),
             )
             post = Post(band_id=band.id, author_user_id=deleting.id, body="personal")
-            session.add_all([asset, post])
+            conversation = SongwritingConversation(
+                user_id=deleting.id, title="Private lyrics"
+            )
+            session.add_all([asset, post, conversation])
             await session.flush()
+            conversation_id = conversation.id
             session.add(Comment(post_id=post.id, author_user_id=deleting.id, body="personal"))
             deleting.deletion_requested_at = utcnow()
             await session.commit()
@@ -581,6 +1018,7 @@ def test_account_deletion_removes_personal_content_and_keeps_anonymous_tombstone
             assert not list(
                 (await session.scalars(select(Post).where(Post.author_user_id == deleting_id))).all()
             )
+            assert await session.get(SongwritingConversation, conversation_id) is None
             assert (await session.get(Band, band_id)).used_bytes == 0
 
     run(scenario())

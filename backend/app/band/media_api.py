@@ -39,9 +39,9 @@ def validate_upload(body: UploadRequest) -> None:
     if body.byte_size > maximum:
         limit = "20 MB" if body.kind == AssetKind.image else "100 MB"
         raise BandAPIError("file_too_large", f"This file must be {limit} or smaller.", 413)
-    if body.kind in {AssetKind.audio, AssetKind.video} and body.project_id is None:
+    if body.kind == AssetKind.video and body.project_id is None:
         raise BandAPIError(
-            "project_media_required", "Audio and video must be uploaded inside a project.", 409
+            "project_media_required", "Video must be uploaded inside a project.", 409
         )
 
 
@@ -107,7 +107,15 @@ async def complete_upload(
     if asset.status == AssetStatus.ready:
         return AssetResponse.model_validate(asset)
     if asset.status == AssetStatus.processing:
-        band_queue.enqueue("media", "app.band.jobs.validate_asset_job", str(asset.id))
+        queued = band_queue.enqueue(
+            "media", "app.band.jobs.validate_asset_job", str(asset.id)
+        )
+        if not queued:
+            raise BandAPIError(
+                "media_queue_unavailable",
+                "Image validation could not start. Please retry shortly.",
+                503,
+            )
         return AssetResponse.model_validate(asset)
     if asset.status not in {AssetStatus.pending, AssetStatus.uploading}:
         raise BandAPIError("upload_failed", "Start a new upload and try again.", 409)
@@ -123,7 +131,15 @@ async def complete_upload(
         raise BandAPIError("upload_size_mismatch", "The uploaded size does not match.", 409)
     asset.status = AssetStatus.processing
     await session.commit()
-    band_queue.enqueue("media", "app.band.jobs.validate_asset_job", str(asset.id))
+    queued = band_queue.enqueue(
+        "media", "app.band.jobs.validate_asset_job", str(asset.id)
+    )
+    if not queued:
+        raise BandAPIError(
+            "media_queue_unavailable",
+            "Image validation could not start. Please retry shortly.",
+            503,
+        )
     return AssetResponse.model_validate(asset)
 
 

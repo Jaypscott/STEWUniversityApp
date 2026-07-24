@@ -25,6 +25,7 @@ from app.band.models import (
     Project,
     ProjectTrack,
     Reaction,
+    ReactionKind,
     TrackTake,
     User,
     UserBlock,
@@ -37,6 +38,7 @@ from app.band.schemas import (
     Page,
     PostCreate,
     PostResponse,
+    PostReactionSummary,
     PostUpdate,
     ProjectCreate,
     ProjectResponse,
@@ -350,7 +352,9 @@ async def validate_mentions(
     return unique
 
 
-async def build_post_response(session: AsyncSession, post: Post) -> PostResponse:
+async def build_post_response(
+    session: AsyncSession, post: Post, current_user_id: uuid.UUID
+) -> PostResponse:
     author = await session.get(User, post.author_user_id)
     assets = list(
         (
@@ -362,6 +366,19 @@ async def build_post_response(session: AsyncSession, post: Post) -> PostResponse
             )
         ).all()
     )
+    post_reactions = list(
+        (
+            await session.scalars(
+                select(Reaction).where(Reaction.post_id == post.id)
+            )
+        ).all()
+    )
+    reaction_counts: dict[ReactionKind, int] = {}
+    current_user_reactions: set[ReactionKind] = set()
+    for reaction in post_reactions:
+        reaction_counts[reaction.kind] = reaction_counts.get(reaction.kind, 0) + 1
+        if reaction.user_id == current_user_id:
+            current_user_reactions.add(reaction.kind)
     return PostResponse(
         id=post.id,
         band_id=post.band_id,
@@ -379,6 +396,17 @@ async def build_post_response(session: AsyncSession, post: Post) -> PostResponse
         edited_at=post.edited_at,
         deleted_at=post.deleted_at,
         attachments=[AssetResponse.model_validate(asset) for asset in assets]
+        if post.deleted_at is None
+        else [],
+        reactions=[
+            PostReactionSummary(
+                kind=kind,
+                count=reaction_counts[kind],
+                reacted_by_current_user=kind in current_user_reactions,
+            )
+            for kind in ReactionKind
+            if kind in reaction_counts
+        ]
         if post.deleted_at is None
         else [],
     )
@@ -403,7 +431,9 @@ async def list_posts(
         UserBlock.blocker_user_id == user.id
     )
     query = select(Post).where(
-        Post.band_id == band_id, Post.author_user_id.not_in(blocked_ids)
+        Post.band_id == band_id,
+        Post.deleted_at.is_(None),
+        Post.author_user_id.not_in(blocked_ids),
     )
     if project_id is not None:
         await require_project(session, project_id, band_id)
@@ -424,7 +454,10 @@ async def list_posts(
     )
     has_more = len(posts) > PAGE_SIZE
     return Page(
-        items=[await build_post_response(session, post) for post in posts[:PAGE_SIZE]],
+        items=[
+            await build_post_response(session, post, user.id)
+            for post in posts[:PAGE_SIZE]
+        ],
         next_cursor=encode_cursor(offset + PAGE_SIZE) if has_more else None,
     )
 
@@ -452,6 +485,18 @@ async def validate_board_card(
         if any(asset.kind != AssetKind.image for asset in assets):
             raise BandAPIError("invalid_image_card", "Image cards accept images only.", 422)
         return (BandCardSize.tall if len(assets) == 1 else BandCardSize.wide), None
+    if kind == BandCardKind.audio:
+        if (
+            len(assets) != 1
+            or external_url is not None
+            or referenced_project_id is not None
+        ):
+            raise BandAPIError(
+                "invalid_audio_card", "An audio card needs one audio file.", 422
+            )
+        if assets[0].kind != AssetKind.audio:
+            raise BandAPIError("invalid_audio_card", "Audio cards accept audio only.", 422)
+        return BandCardSize.wide, None
     if kind == BandCardKind.link:
         if external_url is None or assets or referenced_project_id is not None:
             raise BandAPIError("invalid_link_card", "A link card needs one web link.", 422)
@@ -466,6 +511,51 @@ async def validate_board_card(
             "project_archived", "Choose an active project for this card.", 409
         )
     return BandCardSize.wide, referenced_project
+
+
+async def existing_post_for_assets(
+    session: AsyncSession,
+    *,
+    band_id: uuid.UUID,
+    author_user_id: uuid.UUID,
+    project_id: uuid.UUID | None,
+    card_kind: BandCardKind,
+    asset_ids: list[uuid.UUID],
+) -> Post | None:
+    if not asset_ids:
+        return None
+    candidate_ids = list(
+        (
+            await session.scalars(
+                select(PostAttachment.post_id).where(
+                    PostAttachment.asset_id == asset_ids[0]
+                )
+            )
+        ).all()
+    )
+    for post_id in candidate_ids:
+        post = await session.get(Post, post_id)
+        if (
+            post is None
+            or post.band_id != band_id
+            or post.author_user_id != author_user_id
+            or post.project_id != project_id
+            or post.card_kind != card_kind
+            or post.deleted_at is not None
+        ):
+            continue
+        attached_ids = list(
+            (
+                await session.scalars(
+                    select(PostAttachment.asset_id)
+                    .where(PostAttachment.post_id == post.id)
+                    .order_by(PostAttachment.display_order)
+                )
+            ).all()
+        )
+        if attached_ids == asset_ids:
+            return post
+    return None
 
 
 @router.post("/bands/{band_id}/posts", response_model=PostResponse, status_code=201)
@@ -506,9 +596,12 @@ async def create_post(
                 or asset.deleted_at is not None
             ):
                 raise BandAPIError("asset_not_ready", "Wait for uploads to finish.", 409)
-            if body.project_id is None and asset.kind != AssetKind.image:
+            if body.project_id is None and asset.kind not in {
+                AssetKind.image,
+                AssetKind.audio,
+            }:
                 raise BandAPIError(
-                    "project_media_required", "Audio and video must be shared in a project.", 409
+                    "project_media_required", "Video must be shared in a project.", 409
                 )
             if body.project_id and asset.project_id not in (None, body.project_id):
                 raise BandAPIError("asset_project_mismatch", "This upload belongs elsewhere.")
@@ -533,6 +626,16 @@ async def create_post(
         if not text and external_url is None and not assets:
             raise BandAPIError("empty_post", "Add text, a link, or media.")
         card_size = BandCardSize.compact
+    existing_post = await existing_post_for_assets(
+        session,
+        band_id=band_id,
+        author_user_id=user.id,
+        project_id=body.project_id,
+        card_kind=body.card_kind,
+        asset_ids=[asset.id for asset in assets],
+    )
+    if existing_post is not None:
+        return await build_post_response(session, existing_post, user.id)
     post = Post(
         band_id=band_id,
         project_id=body.project_id,
@@ -561,7 +664,7 @@ async def create_post(
             send_push=True,
         )
     await session.commit()
-    return await build_post_response(session, post)
+    return await build_post_response(session, post, user.id)
 
 
 @router.patch("/bands/{band_id}/posts/{post_id}", response_model=PostResponse)
@@ -626,7 +729,7 @@ async def update_post(
         post.pinned_at = utcnow() if post.is_pinned else None
 
     await session.commit()
-    return await build_post_response(session, post)
+    return await build_post_response(session, post, user.id)
 
 
 @router.delete("/bands/{band_id}/posts/{post_id}", status_code=204)

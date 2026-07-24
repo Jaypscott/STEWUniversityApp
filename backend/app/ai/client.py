@@ -1,14 +1,19 @@
 import os
-from dotenv import load_dotenv
-from openai import OpenAI
+from functools import lru_cache
+from typing import Any
 
 from app.ai.prompts import MODE_PROMPTS
 from app.config.settings import settings
 from app.models.schemas import ChatHistoryItem, ChatMode
 
-load_dotenv()
 
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+@lru_cache(maxsize=1)
+def _client() -> Any:
+    # Importing the OpenAI SDK loads a large generated resource tree. Keep that
+    # work off startup and non-AI commands such as migrations and backend tests.
+    from openai import OpenAI
+
+    return OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 
 def ask_music_theory_ai(
@@ -21,7 +26,7 @@ def ask_music_theory_ai(
         for item in (history or [])[-8:]
     ]
     conversation.append({"role": "user", "content": user_message})
-    response = client.responses.create(
+    response = _client().responses.create(
         model="gpt-4o-mini",
         instructions=MODE_PROMPTS[mode.value],
         input=conversation,

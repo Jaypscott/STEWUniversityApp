@@ -20,7 +20,7 @@ class BandQueue:
             self._redis = Redis.from_url(settings.redis_url)
         return self._redis
 
-    def enqueue(self, queue_name: str, function: str, *args, **kwargs) -> None:
+    def enqueue(self, queue_name: str, function: str, *args, **kwargs) -> bool:
         if settings.band_inline_jobs:
             module_name, name = function.rsplit(".", 1)
             module = __import__(module_name, fromlist=[name])
@@ -30,7 +30,7 @@ class BandQueue:
             threading.Thread(
                 target=target, args=args, kwargs=kwargs, daemon=True
             ).start()
-            return
+            return True
         try:
             options = {}
             if queue_name in {"media", "notifications"}:
@@ -38,8 +38,10 @@ class BandQueue:
             Queue(queue_name, connection=self.redis).enqueue(
                 function, *args, **kwargs, **options
             )
+            return True
         except Exception:
             logger.exception("Could not enqueue Band job", extra={"job": function})
+            return False
 
 
 band_queue = BandQueue()
