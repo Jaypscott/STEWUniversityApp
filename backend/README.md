@@ -39,4 +39,4 @@ The worker consumes `media` and `notifications`. Media jobs validate uploads and
 
 Use `backend/.env.example` as the authoritative variable list. The most important values are PostgreSQL/Redis URLs, `APP_JWT_SECRET`, the Fernet encryption key, Apple Team/Bundle/Key values, APNs Key values, private R2 credentials, platform-admin Apple subject IDs, and published legal/support URLs.
 
-`DATABASE_URL` and `REDIS_URL` are supplied by the Blueprint resources and must not be copied into `stew-band-secrets`. Keep `BAND_INLINE_JOBS=false` and `BAND_AUTO_CREATE_DB=false` in production; Alembic owns production schema changes.
+`DATABASE_URL` and `REDIS_URL` are supplied by the Blueprint resources and must not be copied into `stew-band-secrets`. Keep `BAND_INLINE_JOBS=false` and `BAND_AUTO_CREATE_DB=false` in production; Alembic owns production schema changes. Account progress endpoints default to disabled. Set `PROGRESS_SYNC_ENABLED=true` only after the additive migration and TestFlight client are ready.

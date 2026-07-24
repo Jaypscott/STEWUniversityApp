@@ -47,6 +47,7 @@ class Settings:
 
     band_inline_jobs = os.getenv("BAND_INLINE_JOBS", "false").lower() == "true"
     band_auto_create_db = os.getenv("BAND_AUTO_CREATE_DB", "false").lower() == "true"
+    progress_sync_enabled = os.getenv("PROGRESS_SYNC_ENABLED", "false").lower() == "true"
 
     @cached_property
     def platform_admin_apple_subjects(self) -> set[str]:

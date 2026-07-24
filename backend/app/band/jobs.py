@@ -8,11 +8,11 @@ import uuid
 from datetime import datetime, timezone
 
 import httpx
-import jwt
 from PIL import Image
 from pillow_heif import register_heif_opener
 from sqlalchemy import select
 
+from app.band.apns import send_apns
 from app.band.database import SessionFactory
 from app.band.models import (
     AppleIdentity,
@@ -26,7 +26,6 @@ from app.band.models import (
 )
 from app.band.queue import band_queue
 from app.band.storage import storage
-from app.config.settings import settings
 
 
 def validate_asset_job(asset_id: str) -> None:
@@ -140,45 +139,32 @@ async def _send_push(delivery_id: uuid.UUID) -> None:
         delivery.attempt_count += 1
         retry_error: str | None = None
         try:
-            token = _apns_provider_token()
-            host = (
-                "https://api.push.apple.com"
-                if device.environment == "production"
-                else "https://api.sandbox.push.apple.com"
-            )
-            async with httpx.AsyncClient(http2=True, timeout=10) as client:
-                response = await client.post(
-                    f"{host}/3/device/{device.device_token}",
-                    headers={
-                        "authorization": f"bearer {token}",
-                        "apns-topic": settings.apple_bundle_id,
-                        "apns-push-type": "alert",
-                        "apns-priority": "10",
-                    },
-                    json={
-                        "aps": {
-                            "alert": {
-                                "title": "Band",
-                                "body": "You have new Band activity.",
-                            },
-                            "sound": "default",
+            response = await send_apns(
+                device,
+                {
+                    "aps": {
+                        "alert": {
+                            "title": "Band",
+                            "body": "You have new Band activity.",
                         },
-                        "notification_id": str(notification.id),
-                        "entity_type": notification.related_entity_type,
-                        "entity_id": str(notification.related_entity_id)
-                        if notification.related_entity_id
-                        else None,
+                        "sound": "default",
                     },
-                )
-            if response.status_code == 200:
+                    "notification_id": str(notification.id),
+                    "entity_type": notification.related_entity_type,
+                    "entity_id": str(notification.related_entity_id)
+                    if notification.related_entity_id
+                    else None,
+                },
+                push_type="alert",
+                priority=10,
+            )
+            if response.succeeded:
                 delivery.delivered_at = datetime.now(timezone.utc)
-            elif response.status_code in {400, 410} and any(
-                reason in response.text for reason in ("BadDeviceToken", "Unregistered")
-            ):
+            elif response.token_is_invalid:
                 device.notifications_enabled = False
-                delivery.last_error = response.text[:300]
+                delivery.last_error = response.body
             else:
-                delivery.last_error = response.text[:300]
+                delivery.last_error = response.body
                 retry_error = delivery.last_error
         except Exception as exc:
             delivery.last_error = str(exc)[:300]
@@ -186,18 +172,6 @@ async def _send_push(delivery_id: uuid.UUID) -> None:
         await session.commit()
         if retry_error:
             raise RuntimeError(retry_error)
-
-
-def _apns_provider_token() -> str:
-    if not settings.apns_configured:
-        raise RuntimeError("APNs is not configured")
-    now = int(datetime.now(timezone.utc).timestamp())
-    return jwt.encode(
-        {"iss": settings.apple_team_id, "iat": now},
-        settings.apns_private_key,
-        algorithm="ES256",
-        headers={"kid": settings.apns_key_id},
-    )
 
 
 def cleanup_expired_uploads_job() -> None:

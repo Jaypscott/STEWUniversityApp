@@ -265,6 +265,9 @@ async def privacy_page() -> HTMLResponse:
 <h3>Content and collaboration information</h3>
 <p>We process Bands, memberships, invitations, projects, tracks, takes, mood-board posts, links, comments, reactions, mentions, reports, block lists, notification history, and related metadata. Uploaded content may include audio, video, images, filenames, file types, sizes, duration, and technical validation data.</p>
 
+<h3>Learning progress and game statistics</h3>
+<p>When you choose account progress, we store completed Ear Training answers, mastery, XP, levels, streaks, achievements, daily goals, account time zone, Harmonic Sudoku completion statistics, and Melody Memory results with your STEW account. We also process event, workout-session, and installation identifiers to prevent duplicate awards and synchronize completed activity between your devices. Active games and notification schedules remain on the device.</p>
+
 <h3>Device, security, and support information</h3>
 <p>We process session tokens, Apple authorization data, push-notification device tokens and environment, notification delivery results, IP-address-derived rate-limit identifiers, app installation identifiers used for AI limits, security records, and information you include in support or safety communications. Rate-limit identifiers are hashed before storage.</p>
 
@@ -275,6 +278,7 @@ async def privacy_page() -> HTMLResponse:
 <ul>
   <li>authenticate users, maintain sessions, and provide account recovery and deletion;</li>
   <li>provide private Band collaboration, media storage, invitations, and notifications;</li>
+  <li>calculate and synchronize learning progress and completed game statistics between signed-in devices;</li>
   <li>generate AI-assisted music education and songwriting responses;</li>
   <li>enforce usage limits and protect against abuse, fraud, and security threats;</li>
   <li>review reports, block abusive users, moderate content, and enforce our Terms;</li>
@@ -292,16 +296,17 @@ async def privacy_page() -> HTMLResponse:
 <div class="callout"><strong>No sale or targeted advertising.</strong> The current version of STEW does not sell personal information or use third-party advertising SDKs for targeted advertising.</div>
 
 <h2>5. Storage and security</h2>
-<p>Band account and collaboration records are stored in managed infrastructure, while private media is stored in Cloudflare R2 and accessed using time-limited signed URLs. We use encryption in transit, access controls, hashed refresh tokens, encrypted Apple credentials, scoped storage credentials, and other administrative and technical safeguards. No service can guarantee absolute security.</p>
+<p>Account, learning-progress, game-statistics, and Band collaboration records are stored in managed infrastructure, while private media is stored in Cloudflare R2 and accessed using time-limited signed URLs. We use encryption in transit, access controls, hashed refresh tokens, encrypted Apple credentials, scoped storage credentials, and other administrative and technical safeguards. No service can guarantee absolute security.</p>
 
 <h2>6. Retention and deletion</h2>
 <p>We retain account and collaboration information while needed to provide Band, maintain shared projects, meet security needs, and comply with law. Upload reservations expire automatically, and abandoned uploads are removed. Rate-limit entries expire with their configured usage windows.</p>
-<p>You can initiate deletion in <strong>Band → Settings → Delete account</strong>. Owners must first transfer or delete Bands they own. Access is revoked immediately and a background process removes your Apple identity, sessions, device registrations, authored posts and comments, uploaded media, memberships, reports, invitations, and block relationships. A non-identifying user record may remain where required to preserve shared project relationships. Limited records may also remain in backups or where retention is legally required.</p>
+<p>You can initiate deletion from the in-app Account screen. Owners must first transfer or delete Bands they own. Access is revoked immediately and a background process removes your Apple identity, sessions, device registrations, learning progress, game statistics, authored posts and comments, uploaded media, memberships, reports, invitations, and block relationships. A non-identifying user record may remain where required to preserve shared project relationships. Limited records may also remain in backups or where retention is legally required.</p>
 <p>You can also contact <a href="mailto:{SUPPORT_EMAIL}">{SUPPORT_EMAIL}</a> with privacy questions. Support contact is not a substitute for the in-app account-deletion control.</p>
 
 <h2>7. Your choices</h2>
 <ul>
   <li>Decline push notifications or disable them in iOS Settings.</li>
+  <li>Play as a guest with progress stored only on that device, or choose one device’s legacy progress when enabling account sync.</li>
   <li>Leave a Band, block another user, or report a user or piece of content.</li>
   <li>Remove your posts or media where the app provides deletion controls.</li>
   <li>Delete your Band account through the in-app settings.</li>

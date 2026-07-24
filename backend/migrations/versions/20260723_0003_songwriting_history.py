@@ -1,7 +1,7 @@
 """Add account-synced songwriting conversations.
 
 Revision ID: 20260723_0003
-Revises: 20260714_0002
+Revises: 20260720_0003
 """
 
 import sqlalchemy as sa
@@ -9,7 +9,7 @@ from alembic import op
 
 
 revision = "20260723_0003"
-down_revision = "20260714_0002"
+down_revision = "20260720_0003"
 branch_labels = None
 depends_on = None
 
